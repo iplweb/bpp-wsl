@@ -18,6 +18,9 @@ hosts_validate() {
   local csv="$1" h
   local -a items
   [ -n "$csv" ] || return 1
+  [[ "$csv" != *$'\n'* ]] || return 1
+  # Caly lancuch naraz: brak pustych elementow, przecinkow na brzegach i podwojnych.
+  [[ "$csv" =~ ^[a-z0-9.]+(,[a-z0-9.]+)*$ ]] || return 1
   IFS=, read -ra items <<<"$csv"
   for h in "${items[@]}"; do
     [ "$h" = localhost ] || _hosts_is_ipv4 "$h" || return 1

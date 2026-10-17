@@ -15,3 +15,12 @@
   run bash -c 'source lib/hosts.sh; hosts_validate "localhost,1.2.3.4;rm"'; [ "$status" -ne 0 ]
   run bash -c 'source lib/hosts.sh; hosts_validate "localhost,192.168.0.1"'; [ "$status" -eq 0 ]
 }
+@test "validate rejects trailing comma, newline, empty, octet > 255" {
+  run bash -c 'source lib/hosts.sh; hosts_validate "localhost,"'; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_validate ",localhost"'; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_validate "localhost,,1.2.3.4"'; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_validate $'"'"'localhost\nFOO=1'"'"; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_validate ""'; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_validate "999.1.1.1"'; [ "$status" -ne 0 ]
+  run bash -c 'source lib/hosts.sh; hosts_render_env "localhost,"'; [ "$status" -ne 0 ]
+}
