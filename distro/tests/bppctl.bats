@@ -220,3 +220,28 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ "$status" -eq 0 ]
   [ "$output" = "mock logs --tail 500 --no-color appserver" ]
 }
+
+@test "init writes hosts.env and cert before pull (compose config needs env_file)" {
+  run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(last_step)" = ready ]
+  [ -f "$WORK/state/ssl/cert.pem" ]
+  [ "$(grep -c '^docker pull ' "$MOCK_DOCKER_LOG")" = 3 ]
+}
+
+@test "compose config failure -> error event, no pull of garbage" {
+  MOCK_CONFIG_RC=1 run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ "$(last_step)" = error ]
+  ! grep -q '^docker pull ' "$MOCK_DOCKER_LOG"
+  for l in "${lines[@]}"; do
+    [[ "$(echo "$l" | jq -r .message)" != *'"step"'* ]]
+  done
+}
+
+@test "re-init with new hosts reloads running nginx" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  : >"$MOCK_DOCKER_LOG"
+  MOCK_WEBSERVER_RUNNING=1 "$CTL" init --hosts localhost,10.3.3.3 >/dev/null 2>&1
+  grep -q 'exec -T webserver nginx -s reload' "$MOCK_DOCKER_LOG"
+}

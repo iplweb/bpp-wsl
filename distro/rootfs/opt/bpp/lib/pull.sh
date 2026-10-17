@@ -79,8 +79,10 @@ _pull_consume() {
 # pull_with_progress - pobiera kazdy obraz z `docker compose config --images`.
 pull_with_progress() {
   local -a images
-  local n i=0 img use_socket=0
-  mapfile -t images < <(bpp_compose config --images | awk 'NF && !seen[$0]++')
+  local n i=0 img use_socket=0 list
+  # Podstawienie polecenia (nie <(...)): blad compose musi przerwac pobieranie.
+  list="$(bpp_compose config --images)" || return 1
+  mapfile -t images < <(awk 'NF && !seen[$0]++' <<<"$list")
   n="${#images[@]}"
   [ "$n" -gt 0 ] || {
     echo "brak obrazow do pobrania" >&2

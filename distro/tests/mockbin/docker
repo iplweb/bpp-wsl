@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Atrapa `docker` do testow bpp-ctl. Loguje argv do $MOCK_DOCKER_LOG.
 # Sterowanie: MOCK_IMAGES (lista obrazow, \n), MOCK_HEALTH (starting|healthy|unhealthy|absent),
-# MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC.
+# MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC, MOCK_CONFIG_RC.
+# Jak prawdziwy compose: `config` bez state/hosts.env (env_file) konczy sie bledem.
 echo "docker $*" >>"${MOCK_DOCKER_LOG:?}"
 args=("$@")
 if [ "${args[0]:-}" = compose ]; then
@@ -15,7 +16,13 @@ if [ "${args[0]:-}" = compose ]; then
   sub="${args[$i]:-}"
   rest=("${args[@]:$((i + 1))}")
   case "$sub" in
-    config) printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
+    config)
+      [ -f "${BPP_HOME:?}/state/hosts.env" ] || {
+        echo "env file $BPP_HOME/state/hosts.env not found" >&2
+        exit 1
+      }
+      [ "${MOCK_CONFIG_RC:-0}" = 0 ] || exit "$MOCK_CONFIG_RC"
+      printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
     up) [ -z "${MOCK_UP_SLEEP:-}" ] || sleep "$MOCK_UP_SLEEP"; exit "${MOCK_UP_RC:-0}" ;;
     ps)
       if [[ " ${rest[*]} " == *" -q "* ]]; then

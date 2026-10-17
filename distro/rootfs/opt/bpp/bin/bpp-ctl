@@ -75,20 +75,29 @@ parse_hosts() {
   hosts_validate "$HOSTS" || fail "Nieprawidłowa lista hostów: $HOSTS"
 }
 
-cmd_start() {
-  local cert_changed=0 web_running="" rc
-  parse_hosts "$@"
-  hwclock -s 2>/dev/null || true
-  emit config null "Sprawdzanie konfiguracji"
-  [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
-
+# ensure_hosts_config - certyfikat, state/hosts.env i state/hosts dla $HOSTS;
+# regeneruje tylko przy zmianie listy hostow albo braku plikow.
+# Ustawia CERT_CHANGED=1, gdy cos wygenerowano (init -> start: flaga przetrwa,
+# wiec nginx zostanie przeladowany, jesli juz dziala).
+CERT_CHANGED=0
+ensure_hosts_config() {
   if state_hosts_changed "$HOSTS" || [ ! -f "$BPP_HOME/state/ssl/cert.pem" ] || [ ! -f "$BPP_HOME/state/hosts.env" ]; then
-    cert_changed=1
+    CERT_CHANGED=1
     emit cert null "Generowanie certyfikatu dla: $HOSTS"
     cert_generate "$HOSTS" "$BPP_HOME/state/ssl" || fail "Nie udało się wygenerować certyfikatu"
     hosts_render_env "$HOSTS" >"$BPP_HOME/state/hosts.env" || fail "Nie udało się zapisać hosts.env"
     printf '%s\n' "$HOSTS" >"$BPP_HOME/state/hosts"
   fi
+}
+
+cmd_start() {
+  local web_running="" rc
+  parse_hosts "$@"
+  hwclock -s 2>/dev/null || true
+  emit config null "Sprawdzanie konfiguracji"
+  [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
+
+  ensure_hosts_config
 
   web_running="$(bpp_compose ps --status running -q webserver 2>/dev/null || true)"
   emit start null "Uruchamianie usług"
@@ -101,7 +110,7 @@ cmd_start() {
   timeout "${BPP_HEALTH_TIMEOUT:-1800}" bash -c 'bpp_compose up -d >&2' || rc=$?
   [ "$rc" -ne 124 ] || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${BPP_HEALTH_TIMEOUT:-1800} s)"
   [ "$rc" -eq 0 ] || fail "docker compose up nie powiodło się"
-  if [ "$cert_changed" = 1 ] && [ -n "$web_running" ]; then
+  if [ "$CERT_CHANGED" = 1 ] && [ -n "$web_running" ]; then
     bpp_compose exec -T webserver nginx -s reload >&2 || fail "Nie udało się przeładować nginx"
   fi
 
@@ -113,6 +122,8 @@ cmd_init() {
   parse_hosts "$@"
   emit config null "Przygotowanie konfiguracji"
   state_ensure_env || fail "Nie udało się utworzyć state/.env (brak image-tag?)"
+  # compose (config --images) wymaga plikow env_file, w tym state/hosts.env.
+  ensure_hosts_config
   pull_with_progress || fail "Pobieranie obrazów nie powiodło się"
   cmd_start --hosts "$HOSTS"
 }
