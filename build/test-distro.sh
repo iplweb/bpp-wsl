@@ -23,6 +23,7 @@ fi
 
 exec docker run --rm \
   -v "$repo:$repo" \
+  -v /var/run/docker.sock:/var/run/docker.sock \
   -w "$repo/distro/rootfs/opt/bpp" \
   -e BPP_HOME="$repo/distro/rootfs/opt/bpp" \
   "$image" bats "${files[@]}"
