@@ -1,0 +1,4 @@
+dist/
+bin/
+obj/
+distro/rootfs/opt/bpp/state/
