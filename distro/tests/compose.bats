@@ -42,3 +42,22 @@ teardown() { rm -rf "$WORK"; }
   [[ "$output" == *proxy_hide_header* ]]
   [[ "$output" != *add_header* ]]
 }
+
+@test "protected media is internal-only" {
+  run awk '/location \/media\/protected\//,/}/' "$BPP_HOME/nginx/nginx.conf"
+  [[ "$output" == *"internal;"* ]]
+  [[ "$output" == *"alias /var/www/html/mediaroot/protected/;"* ]]
+}
+
+@test "media denies script extensions" {
+  run grep -E 'location ~\* .*\(php.*\|py\|.*\|sh\|' "$BPP_HOME/nginx/nginx.conf"
+  [ "$status" -eq 0 ]
+  run awk '/location ~\* .*php/,/}/' "$BPP_HOME/nginx/nginx.conf"
+  [[ "$output" == *"deny all;"* ]]
+}
+
+@test "missing BPP_IMAGE_TAG fails fast" {
+  run bash -c "cd $WORK && : > state/.env && docker compose --env-file state/.env config"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"BPP_IMAGE_TAG is required"* ]]
+}

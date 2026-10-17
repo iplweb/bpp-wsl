@@ -55,7 +55,7 @@ services:
 
   appserver:
     <<: *django
-    image: iplweb/bpp_appserver:${BPP_IMAGE_TAG}
+    image: iplweb/bpp_appserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     environment:
       DJANGO_BPP_DB_HOST: dbserver
       DJANGO_BPP_DB_PORT: "5432"
@@ -80,7 +80,7 @@ services:
 
   workerserver:
     <<: *django
-    image: iplweb/bpp_workerserver:${BPP_IMAGE_TAG}
+    image: iplweb/bpp_workerserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     environment:
       CELERY_QUEUE: "celery,denorm"
       CELERY_WORKER_CONCURRENCY_PERCENT: "25"
@@ -99,7 +99,7 @@ services:
 
   celerybeat:
     <<: *django
-    image: iplweb/bpp_beatserver:${BPP_IMAGE_TAG}
+    image: iplweb/bpp_beatserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     volumes:
       - staticfiles:/staticroot
       - media:/mediaroot
@@ -121,7 +121,7 @@ services:
 
   denorm-queue:
     <<: *django
-    image: iplweb/bpp_denorm_queue:${BPP_IMAGE_TAG}
+    image: iplweb/bpp_denorm_queue:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     depends_on:
       workerserver:
         condition: service_healthy
