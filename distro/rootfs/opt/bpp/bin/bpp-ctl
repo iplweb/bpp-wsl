@@ -46,16 +46,14 @@ appserver_health() {
 }
 
 wait_healthy() {
-  local timeout="${BPP_HEALTH_TIMEOUT:-1800}" interval="${BPP_HEALTH_INTERVAL:-5}" h
-  local deadline=$((SECONDS + timeout))
-  emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
+  local interval="${BPP_HEALTH_INTERVAL:-5}" h
   while :; do
     h="$(appserver_health)"
     case "$h" in
       healthy) return 0 ;;
       unhealthy) fail "Aplikacja BPP zgłosiła stan unhealthy" ;;
     esac
-    ((SECONDS < deadline)) || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${timeout} s)"
+    ((SECONDS < DEADLINE)) || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${BPP_HEALTH_TIMEOUT:-1800} s)"
     sleep "$interval"
   done
 }
@@ -78,7 +76,7 @@ parse_hosts() {
 }
 
 cmd_start() {
-  local cert_changed=0 web_running=""
+  local cert_changed=0 web_running="" rc
   parse_hosts "$@"
   hwclock -s 2>/dev/null || true
   emit config null "Sprawdzanie konfiguracji"
@@ -94,7 +92,15 @@ cmd_start() {
 
   web_running="$(bpp_compose ps --status running -q webserver 2>/dev/null || true)"
   emit start null "Uruchamianie usług"
-  bpp_compose up -d >&2 || fail "docker compose up nie powiodło się"
+  # `up -d` blokuje na zdrowiu appservera (depends_on), czyli na migracjach:
+  # migrate emitujemy przed nim, a calosc ograniczamy wspolnym limitem czasu.
+  emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
+  DEADLINE=$((SECONDS + ${BPP_HEALTH_TIMEOUT:-1800}))
+  export -f bpp_compose
+  rc=0
+  timeout "${BPP_HEALTH_TIMEOUT:-1800}" bash -c 'bpp_compose up -d >&2' || rc=$?
+  [ "$rc" -ne 124 ] || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${BPP_HEALTH_TIMEOUT:-1800} s)"
+  [ "$rc" -eq 0 ] || fail "docker compose up nie powiodło się"
   if [ "$cert_changed" = 1 ] && [ -n "$web_running" ]; then
     bpp_compose exec -T webserver nginx -s reload >&2 || fail "Nie udało się przeładować nginx"
   fi

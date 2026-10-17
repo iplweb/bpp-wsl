@@ -13,7 +13,7 @@ bpp_compose() {
 # state_ensure_env - tworzy state/.env (0600) tylko gdy nie istnieje, wiec
 # haslo bazy i SECRET_KEY przetrwaja kolejne wywolania init.
 state_ensure_env() {
-  local state="$BPP_HOME/state" tag tmp
+  local state="$BPP_HOME/state" tag tmp db_pw secret altcha
   [ -f "$state/.env" ] && return 0
   [ -r "$BPP_HOME/image-tag" ] || {
     echo "brak pliku $BPP_HOME/image-tag" >&2
@@ -24,20 +24,27 @@ state_ensure_env() {
     echo "pusty plik $BPP_HOME/image-tag" >&2
     return 1
   }
+  db_pw="$(openssl rand -hex 24)" || return 1
+  secret="$(openssl rand -hex 50)" || return 1
+  altcha="$(openssl rand -hex 32)" || return 1
+  [ -n "$db_pw" ] && [ -n "$secret" ] && [ -n "$altcha" ] || {
+    echo "openssl rand zwrocil pusty wynik" >&2
+    return 1
+  }
   mkdir -p "$state" || return 1
   tmp="$(umask 077 && mktemp "$state/.env.XXXXXX")" || return 1
   {
     echo "DJANGO_BPP_DB_NAME=bpp"
     echo "DJANGO_BPP_DB_USER=bpp"
-    echo "DJANGO_BPP_DB_PASSWORD=$(openssl rand -hex 24)"
+    echo "DJANGO_BPP_DB_PASSWORD=$db_pw"
     echo "DJANGO_BPP_DB_HOST=dbserver"
     echo "DJANGO_BPP_DB_PORT=5432"
     echo "DJANGO_BPP_REDIS_HOST=redis"
     echo "DJANGO_BPP_REDIS_PORT=6379"
     echo "DJANGO_BPP_REDIS_DB_BROKER=1"
     echo "DJANGO_BPP_REDIS_DB_CELERY=2"
-    echo "DJANGO_BPP_SECRET_KEY=$(openssl rand -hex 50)"
-    echo "ALTCHA_HMAC_KEY=$(openssl rand -hex 32)"
+    echo "DJANGO_BPP_SECRET_KEY=$secret"
+    echo "ALTCHA_HMAC_KEY=$altcha"
     echo "STATIC_ROOT=/staticroot/"
     echo "DJANGO_BPP_MEDIA_ROOT=/mediaroot"
     echo "DJANGO_SETTINGS_MODULE=django_bpp.settings.production"

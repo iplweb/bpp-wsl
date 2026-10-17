@@ -16,7 +16,7 @@ if [ "${args[0]:-}" = compose ]; then
   rest=("${args[@]:$((i + 1))}")
   case "$sub" in
     config) printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
-    up) exit "${MOCK_UP_RC:-0}" ;;
+    up) [ -z "${MOCK_UP_SLEEP:-}" ] || sleep "$MOCK_UP_SLEEP"; exit "${MOCK_UP_RC:-0}" ;;
     ps)
       if [[ " ${rest[*]} " == *" -q "* ]]; then
         [ "${MOCK_WEBSERVER_RUNNING:-0}" = 1 ] && echo abc123

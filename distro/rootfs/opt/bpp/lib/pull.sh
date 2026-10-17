@@ -43,7 +43,7 @@ _pull_ratio() {
 
 # _pull_image_socket <image> <i> <n>
 _pull_image_socket() {
-  local img="$1" i="$2" n="$3" repo tag last=-1 kind rest
+  local img="$1" i="$2" n="$3" repo tag
   repo="${img%:*}"
   tag="${img##*:}"
   # brak tagu (ostatni ':' nalezy do portu rejestru albo go nie ma)
@@ -54,16 +54,26 @@ _pull_image_socket() {
   curl -sS --fail -N --unix-socket "$BPP_DOCKER_SOCK" -X POST \
     "http://localhost/images/create?fromImage=${repo}&tag=${tag}" |
     jq -rn --unbuffered "$_PULL_JQ" |
-    while read -r kind rest; do
-      if [ "$kind" = ERR ]; then
-        echo "docker pull $img: $rest" >&2
-        exit 1
-      fi
-      if ((SECONDS - last >= 1)); then
-        last=$SECONDS
-        emit pull "$(_pull_ratio "$i" "$n" "$rest")" "Pobieranie obrazu $img"
-      fi
-    done
+    _pull_consume "$img" "$i" "$n"
+}
+
+# _pull_consume <image> <i> <n> - czyta "P <ulamek>"/"ERR <tekst>" ze stdin i emituje
+# postep co >= BPP_PULL_EMIT_INTERVAL s. Postep jest monotoniczny (ulamek spada,
+# gdy pojawiaja sie nowe warstwy - nie pokazujemy cofniecia).
+_pull_consume() {
+  local img="$1" i="$2" n="$3" last=-1 maxf=0 kind rest
+  local every="${BPP_PULL_EMIT_INTERVAL:-1}"
+  while read -r kind rest; do
+    if [ "$kind" = ERR ]; then
+      echo "docker pull $img: $rest" >&2
+      return 1
+    fi
+    maxf="$(LC_NUMERIC=C awk -v a="$maxf" -v b="$rest" 'BEGIN { print (b > a ? b : a) }')"
+    if ((SECONDS - last >= every)); then
+      last=$SECONDS
+      emit pull "$(_pull_ratio "$i" "$n" "$maxf")" "Pobieranie obrazu $img"
+    fi
+  done
 }
 
 # pull_with_progress - pobiera kazdy obraz z `docker compose config --images`.

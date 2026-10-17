@@ -70,6 +70,50 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ "$(cat "$WORK/state/hosts")" = localhost,10.1.1.1 ]
 }
 
+@test "unchanged hosts: hosts.env and hosts untouched, no force-recreate" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  h1=$(md5sum "$WORK/state/hosts.env" "$WORK/state/hosts")
+  : >"$MOCK_DOCKER_LOG"
+  run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$h1" = "$(md5sum "$WORK/state/hosts.env" "$WORK/state/hosts")" ]
+  ! grep -q -- '--force-recreate' "$MOCK_DOCKER_LOG"
+}
+
+@test "migrate is emitted before a blocking up, and up is bounded by the timeout" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  start=$SECONDS
+  MOCK_UP_SLEEP=10 BPP_HEALTH_TIMEOUT=2 run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ $((SECONDS - start)) -lt 8 ]
+  [ "$(echo "${lines[-2]}" | jq -r .step)" = migrate ]
+  [ "$(last_step)" = error ]
+  [[ "${lines[-1]}" == *limit* ]]
+}
+
+@test "failing or empty openssl rand -> error, no state/.env" {
+  mkdir -p "$WORK/failbin"
+  printf '#!/bin/sh\nexit 1\n' >"$WORK/failbin/openssl"
+  chmod +x "$WORK/failbin/openssl"
+  PATH="$WORK/failbin:$PATH" run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ "$(last_step)" = error ]
+  [ ! -e "$WORK/state/.env" ]
+  printf '#!/bin/sh\nexit 0\n' >"$WORK/failbin/openssl"
+  PATH="$WORK/failbin:$PATH" run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ ! -e "$WORK/state/.env" ]
+}
+
+@test "socket-path progress never goes backwards" {
+  source "$BPP_HOME/lib/pull.sh"
+  BPP_PULL_EMIT_INTERVAL=0
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; BPP_PULL_EMIT_INTERVAL=0; printf "P 0.5\nP 0.2\nP 0.7\nP 0.1\n" | _pull_consume img 0 1'
+  [ "$status" -eq 0 ]
+  p=$(printf '%s\n' "${lines[@]}" | jq -sr 'map(.progress*10000|round)|join(",")')
+  [ "$p" = "5000,5000,7000,7000" ]
+}
+
 @test "nginx reload only when cert changed and webserver already running" {
   "$CTL" init --hosts localhost >/dev/null 2>&1
   : >"$MOCK_DOCKER_LOG"
