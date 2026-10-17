@@ -64,21 +64,38 @@ formularza kreatora BPP bez otwierania terminala i bez czytania instrukcji
   `redis` (`redis:8.6.2`), `appserver` (`iplweb/bpp_appserver`, port 8000,
   `/health/`), `workerserver` (`iplweb/bpp_workerserver`,
   `CELERY_QUEUE=celery,denorm`), `celerybeat` (`iplweb/bpp_beatserver`),
-  `denorm-queue` (`iplweb/bpp_denorm_queue`), `authserver`
-  (`iplweb/bpp_authserver`, port 8001), `webserver`
-  (`owasp/modsecurity-crs:nginx`).
+  `denorm-queue` (`iplweb/bpp_denorm_queue`), `webserver`
+  (`owasp/modsecurity-crs:nginx`). `authserver` (`iplweb/bpp_authserver`)
+  **nie jest potrzebny**: `/__external_auth/` występuje tylko w
+  `settings/auth_server.py` i `urls_auth_server.py`, a nginx używa go
+  wyłącznie do `auth_request` przed grafaną/dozzle/flower/netdata
+  (`_bpp-locations.conf:173-346`) — wszystko to nie-cele.
+- bpp-deploy ma limity pamięci na usługach (`docker-compose.database.yml:79-83`,
+  `application.yml:120-124`, `workers.yml:51-57`); autotune postgresa bez
+  limitu cgroup liczy się od całej pamięci VM (`dbserver/autotune.sh:79-91`).
+- Obraz `owasp/modsecurity-crs:nginx` działa jako uid 101 i wymaga
+  kontenera `webserver-init` (root) do ustawienia uprawnień klucza
+  (`docker-compose.infrastructure.yml:50-92`) oraz zmiennych WAF
+  (`infrastructure.yml:124-132`).
+- HSTS jest ustawiany w dwóch miejscach: Django (`production.py:169-170`)
+  i nginx (`defaults/webserver/security-headers.conf:4`).
 - Główny `bpp-deploy/docker-compose.yml` `include:`-uje wszystko bez
   profili → **dystrybucja ma własny, odchudzony compose**, nie reużywa
   głównego.
 - `appserver` sam inicjalizuje bazę przy starcie (`baseline_load` +
-  `migrate`, grace healthchecka 1800 s). Bez połączenia przez pgbouncer:
+  `migrate`; healthcheck zdefiniowany w compose, nie w obrazie —
+  `application.yml:111-119`, grace 1800 s). Bez połączenia przez pgbouncer:
   `BPP_APPSERVER_DB_HOST=dbserver`, `BPP_APPSERVER_DB_PORT=5432`.
 - Kreator pierwszego uruchomienia (`bpp_setup_wizard`): przy braku
   użytkowników każdy URL przekierowuje na `/setup/step/admin_user/`, potem
   `/setup/step/uczelnia/`.
-- **Hosty:** `ALLOWED_HOSTS` budowane wyłącznie z `DJANGO_BPP_HOSTNAME`
-  (jeden) albo `DJANGO_BPP_HOSTNAMES` (CSV, minimum dwa) —
-  `bpp/src/django_bpp/settings/base.py:652+`. Brak wildcardu.
+- **Hosty:** `ALLOWED_HOSTS` = stałe `127.0.0.1`, `appserver`,
+  `appserver:8000` + `DJANGO_BPP_HOSTNAME` (jeden) albo
+  `DJANGO_BPP_HOSTNAMES` (CSV, minimum dwa) —
+  `bpp/src/django_bpp/settings/base.py:652-702`. Brak wildcardu.
+  `CSRF_TRUSTED_ORIGINS` budowane bez portu (`base.py:704`), dodatki przez
+  `DJANGO_BPP_CSRF_EXTRA_ORIGINS`. `USE_X_FORWARDED_HOST` nie jest
+  ustawione — liczy się nagłówek `Host`.
 - **nginx z bpp-deploy nie nadaje się bez zmian:** domyślny serwer 443 ma
   `ssl_reject_handshake on` (wejście po surowym IP = brak SNI = zerwany
   handshake), a `_bpp-locations.conf` wysyła `Host $host` (bez portu) →
@@ -119,15 +136,30 @@ bpp-wsl/
   wchodzi do powłoki; brak OOBE z pytaniem o użytkownika),
   `[interop] appendWindowsPath=false`, `[automount]` może zostać domyślny.
 - Pliki BPP w `/opt/bpp/`:
-  - `docker-compose.yml` — 8 usług z sekcji 3, bez pgbouncera, bez
-    monitoringu; `webserver` publikuje **tylko** `8443:443` (bez 80, bez
-    UDP/QUIC — moja decyzja, upraszcza przekierowania).
+  - `docker-compose.yml` — 7 usług: `dbserver`, `redis`, `appserver`,
+    `workerserver`, `celerybeat`, `denorm-queue`, `webserver`; bez
+    pgbouncera, authservera i monitoringu. `webserver` publikuje **tylko**
+    `8443:443` (bez 80, bez UDP/QUIC — decyzja Claude). Wszystkie usługi
+    `restart: unless-stopped` (nie `always` — dockerd nie może podnieść
+    starego stosu ze starą listą hostów, zanim `bpp-ctl start` ją
+    zaktualizuje). Userland-proxy dockera zostaje włączony (domyślnie) —
+    localhostForwarding WSL potrzebuje słuchającego gniazda.
+  - **Limity pamięci (decyzja Claude, po recenzji):** `dbserver` 1 GB,
+    `appserver` 1,5 GB, `workerserver` 1 GB z niskim
+    `CELERY_WORKER_CONCURRENCY_PERCENT` (np. 1–2 procesy), `redis` 256 MB,
+    `celerybeat`/`denorm-queue` po 256 MB, `webserver` 128 MB — razem
+    ~4,5 GB, mieści się w domyślnych 50% RAM maszyny 8 GB z zapasem na
+    system. Autotune postgresa liczy wtedy od limitu cgroup. Wartości do
+    korekty po pomiarze.
   - `nginx/` — **własna** konfiguracja nginx (patrz 4.3).
   - `dbserver/` — skopiowane z bpp-deploy `docker-entrypoint-autotune.sh`
     i `autotune.sh` (wymagane przez obraz dbserver w compose).
   - `bin/bpp-ctl` — jedno narzędzie, które woła instalator/ikonka (4.2).
 - Dane w nazwanych wolumenach dockera wewnątrz wirtualnego dysku
-  dystrybucji (znikają razem z nią przy odinstalowaniu).
+  dystrybucji (znikają razem z nią przy odinstalowaniu). `ext4.vhdx`
+  nigdy się nie kurczy; po imporcie instalator próbuje
+  `wsl --manage BPP --set-sparse true` (bez admina, nowsze WSL; błąd
+  ignorowany).
 - Wersja obrazów BPP **przypięta** do konkretnego tagu datowego w momencie
   budowy instalatora (np. `202609.1402`), nie `latest` — moja decyzja:
   instalator ma być powtarzalny; tag jest parametrem buildu.
@@ -144,9 +176,9 @@ paska postępu), logi ludzkie na stderr.
 | Polecenie | Co robi |
 |---|---|
 | `init --hosts <csv>` | jednorazowo: losuje hasło DB i `SECRET_KEY` → `/opt/bpp/.env`; generuje certyfikat; `docker compose pull` z postępem; `up -d`; czeka na zdrowie appservera |
-| `start --hosts <csv>` | aktualizuje listę hostów (jeśli się zmieniła: nowy certyfikat z SAN + nowe `DJANGO_BPP_HOSTNAMES`), `docker compose up -d`, czeka na zdrowie |
+| `start --hosts <csv>` | `hwclock -s` (zegar WSL2 rozjeżdża się po uśpieniu), aktualizuje listę hostów (jeśli się zmieniła: nowy certyfikat z SAN + nowe `DJANGO_BPP_HOSTNAMES`), `docker compose up -d`, czeka na zdrowie |
 | `stop` | `docker compose stop` |
-| `status` | JSON: stan kontenerów, zdrowie, adres IP dystrybucji (`hostname -I`) |
+| `status` | JSON: stan kontenerów, zdrowie appservera |
 | `logs [usługa]` | ostatnie N linii `docker compose logs` |
 
 Format zdarzeń postępu (propozycja, do dopracowania przez budującego):
@@ -159,13 +191,15 @@ albo Docker Engine API przez gniazdo) — szczegół dla budującego.
 **Hosty:** `--hosts` zawsze zawiera `localhost` + wszystkie adresy IPv4
 interfejsów Windowsa w stanie „Up” (bez loopbacku, APIPA i wirtualnych
 interfejsów WSL/Hyper-V). Z tego:
-- `DJANGO_BPP_HOSTNAMES=localhost,127.0.0.1,<IP…>` (zawsze ≥ 2, więc
-  zawsze wariant CSV),
+- `DJANGO_BPP_HOSTNAMES=localhost,<IP…>`, a gdy brak adresów LAN —
+  `DJANGO_BPP_HOSTNAME=localhost` (wariant jedno/wielohostowy wybiera
+  `bpp-ctl`; `127.0.0.1` jest już w `ALLOWED_HOSTS` na stałe),
 - certyfikat self-signed z SAN: `DNS:localhost`, `IP:127.0.0.1`, `IP:<IP…>`,
   ważny np. 10 lat (to instancja testowa),
 - `DJANGO_BPP_CSRF_EXTRA_ORIGINS` z `https://<host>:8443` dla każdego hosta
-  (asekuracyjnie, choć przy poprawnym `Host` z portem Django i tak
-  porównuje `Origin` z `request.get_host()`).
+  (wymagane — `CSRF_TRUSTED_ORIGINS` z BPP nie ma portu; dodatkowo nginx
+  przekazuje `Host` z portem, więc `Origin` zgadza się też z
+  `request.get_host()`).
 Kontenery są przebudowywane tylko przy zmianie listy (porównanie z
 zapisaną ostatnią listą) — zwykły start nie restartuje stosu bez potrzeby.
 
@@ -174,24 +208,43 @@ nie widać).
 
 ### 4.3 Własny nginx
 
-Ten sam obraz `owasp/modsecurity-crs:nginx` (spójność z produkcją) albo
-zwykły `nginx` — wybór budującego; ważne są zachowania:
+**Decyzja Claude (po recenzji):** zwykły obraz `nginx:<przypięta wersja>`
+(nie `owasp/modsecurity-crs` — ten wymaga kontenera init do uprawnień
+klucza, konfiguracji WAF i ma pułapki ścieżek szablonów) i **własny,
+krótki `nginx.conf` pisany od zera**, nie kopia `_bpp-locations.conf`
+(ta ciągnie ukryte zależności: `map $connection_upgrade`, `limit_req_zone`,
+`bpp-global-limits.inc` z `25-render-bpp-limits.sh`, `maintenance.html`,
+`/__bpp_500__`). Zachowania:
 - jeden serwer `listen 443 ssl default_server` z naszym certyfikatem —
   **bez** `ssl_reject_handshake`, przyjmuje dowolny Host/SNI,
+- lokacje: `/static/` i `/media/` z wolumenów współdzielonych
+  z appserverem (ścieżki jak w bpp-deploy), reszta → `appserver:8000`
+  (z obsługą websocketów, jeśli appserver ich używa — budujący sprawdza),
 - `proxy_set_header Host $http_host;` (z portem),
-  `X-Forwarded-Proto https`, `X-Forwarded-Host $http_host`,
-- lokacje statyczne/media/upstreamy jak w `bpp-deploy/defaults/webserver/_bpp-locations.conf`
-  (appserver, authserver dla `/__external_auth/` i `auth_request`),
-  skopiowane i dostosowane — budujący sprawdza, które lokacje są potrzebne,
-- healthcheck kontenera po HTTP wewnątrz kontenera (np. osobny
-  `listen 80` niepublikowany, `/healthz`).
+  `X-Forwarded-Proto https`, `X-Forwarded-For`,
+- **bez HSTS:** brak `security-headers.conf`, a nagłówek z Django
+  usuwany `proxy_hide_header Strict-Transport-Security;` — inaczej
+  przeglądarka laika przez rok wymuszałaby HTTPS na każdym
+  `http://localhost`,
+- klucz certyfikatu czytelny dla procesu nginx (`bpp-ctl` ustawia
+  uprawnienia; bez kontenera init),
+- healthcheck kontenera: osobny `listen 80` (niepublikowany) z `/healthz`.
 
 ### 4.4 Aplikacja Windows (`installer/`)
 
 .NET 8 WinForms (decyzja Claude — najprostsze, wystarczy na okno z logo
-i paskiem), publikowane jako **jeden plik** `BPP-Setup.exe`
-(`-r win-x64 --self-contained -p:PublishSingleFile=true`), z **osadzonym**
-rootfs dystrybucji (`bpp-rootfs.tar.gz`) — laik ma jeden plik.
+i paskiem), publikowane jako single-file
+(`-r win-x64 --self-contained -p:PublishSingleFile=true`).
+
+**Pakowanie (decyzja Claude, po recenzji):** dwa programy z jednego
+projektu/rozwiązania:
+- `BPP.exe` — mały program ikonki/deinstalacji (bez rootfs),
+- `BPP-Setup.exe` — instalator; rootfs (`bpp-rootfs.tar.gz`, kilkaset MB)
+  i `BPP.exe` są **doklejone na końcu pliku** jako ładunek (stopka
+  z offsetem i długością, odczyt przez `Environment.ProcessPath`), nie jako
+  `EmbeddedResource` (kompilacja i pamięć) ani
+  `IncludeAllContentForSelfExtract` (rozpakowanie do `%TEMP%` przy każdym
+  starcie). Laik nadal pobiera jeden plik.
 
 **Zasada uprawnień (decyzja użytkownika: ma działać bez admina, jeśli się
 da).** Manifest `asInvoker` — instalator i ikonka działają jako **zwykły
@@ -199,18 +252,35 @@ użytkownik, który kliknął**. Dystrybucje WSL są per-użytkownik, więc impo
 `bpp-ctl`, pliki, skróty i wpis odinstalowania należą do tego użytkownika.
 Uprawnienia administratora są potrzebne tylko do dwóch rzeczy i wtedy
 instalator uruchamia **osobny, krótki proces potomny z UAC**
-(`BPP.exe --elevated <zadanie>`), który robi tylko to jedno i kończy się:
+(`BPP-Setup.exe --elevated <zadanie> <argumenty>`), który robi tylko to
+jedno i kończy się. **Wszystkie ścieżki przekazywane są jako bezwzględne
+argumenty** — proces z UAC może działać na innym koncie (informatyka),
+więc nigdy nie wylicza `%LOCALAPPDATA%`/HKCU sam:
 
 | Zadanie z UAC | Kiedy | Bez admina |
 |---|---|---|
-| `install-wsl` — `wsl --install --no-distribution` | tylko gdy WSL nie ma | nie da się — komunikat „Poproś administratora o zainstalowanie WSL” |
-| `firewall` — reguła zapory przychodzącej dla `BPP.exe`, TCP 8443, profile Prywatny + Domena | raz, przy instalacji | BPP działa tylko na tym komputerze (`localhost`); w menu ikonki pozycja „Udostępnij w sieci lokalnej…” ponawia próbę |
+| `enable-wsl` — włączenie funkcji Windows `Microsoft-Windows-Subsystem-Linux` i `VirtualMachinePlatform` (DISM) | tylko gdy ich brak | nie da się — komunikat „Poproś administratora o włączenie WSL” |
+| `firewall <ścieżka-bezwzględna-BPP.exe>` — reguła zapory przychodzącej dla programu, TCP 8443, profile Prywatny + Domena + **Publiczny** | raz, przy instalacji | BPP działa tylko na tym komputerze (`localhost`); w menu ikonki pozycja „Udostępnij w sieci lokalnej…” ponawia próbę |
+
+Sam pakiet WSL (`wsl --install --no-distribution` / `wsl --update`)
+instaluje **zwykły użytkownik** po restarcie — pakiet sklepowy WSL bywa
+instalowany per-użytkownik, więc instalowanie go z konta admina mogłoby
+zostawić zwykłemu użytkownikowi tylko zaślepkę. (Do weryfikacji, §7.)
+
+Profil Publiczny włączony (decyzja Claude, po recenzji): Windows 11
+domyślnie oznacza nowe sieci jako publiczne, więc bez niego dostęp z LAN
+po cichu nie działałby na większości laptopów; reguła i tak dotyczy tylko
+`BPP.exe` i portu 8443.
+
+**Przekaźnik nie wiąże adresów LAN, dopóki reguła zapory nie istnieje** —
+inaczej Windows pokaże zwykłemu użytkownikowi „Alert zabezpieczeń”, a jego
+„Anuluj” tworzy trwałą regułę **blokującą** `BPP.exe`.
 
 Jeśli UAC zostanie zatwierdzony hasłem innej osoby (informatyka), nic się
 nie psuje: oba zadania są ogólnosystemowe, a wszystko per-użytkownik
 zrobił wcześniej i dalej robi proces zwykłego użytkownika.
 
-Pliki programu: `BPP-Setup.exe` kopiuje się do
+Pliki programu: instalator wypakowuje `BPP.exe` do
 `%LOCALAPPDATA%\Programs\BPP\BPP.exe` (bez Program Files — nie wymaga
 admina). Dysk dystrybucji: `%LOCALAPPDATA%\BPP\wsl\`. Wpis odinstalowania
 w `HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\BPP`. Skrót
@@ -222,15 +292,20 @@ Ten sam exe pełni role wybierane argumentem:
 1. **Ekran powitalny**: logo BPP, jedno zdanie co się stanie, przycisk
    „Zainstaluj”. Informacja o ~2 GB do pobrania i wymaganym internecie.
 2. **Sprawdzenia wstępne**: CPU x64 (inaczej komunikat i koniec).
-   **Wymagania sprzętowe (decyzja Claude):** < 8 GB RAM → ostrzeżenie
-   „BPP może działać wolno” z możliwością kontynuacji; < 25 GB wolnego
-   miejsca na dysku z `%LOCALAPPDATA%` → odmowa z komunikatem.
-   `.wslconfig` nietknięty; compose bez dodatkowych limitów pamięci
-   poza tym, co ustawia autotune postgresa.
+   **Wymagania sprzętowe (decyzja Claude, po recenzji):** < 8 GB RAM →
+   **odmowa** z komunikatem (przy domyślnym limicie WSL 50% RAM mniej nie
+   zmieści stosu); < 25 GB wolnego miejsca na dysku z `%LOCALAPPDATA%` →
+   odmowa (kilka GB rozpakowanych obrazów + baza + niekurczący się
+   `ext4.vhdx`). `.wslconfig` nietknięty; limity pamięci w compose (4.1).
    Port 8443 zajęty na Windowsie → komunikat z nazwą procesu, który go
-   zajmuje, i koniec (port jest stały — decyzja użytkownika).
-3. **WSL**: jeśli `wsl.exe --status` zawodzi / brak WSL2 → zadanie
-   `install-wsl` z UAC; błąd wirtualizacji → zrozumiały komunikat. Jeśli
+   zajmuje, i koniec (port jest stały — decyzja użytkownika). Sprawdzenie
+   **przed** pierwszym uruchomieniem dystrybucji (potem port trzyma
+   przekaźnik localhost WSL).
+3. **WSL**: jeśli `wsl.exe --status` zawodzi / brak WSL2 (uwaga: wyjście
+   `wsl.exe` jest w UTF-16LE, chyba że `WSL_UTF8=1`) → zadanie `enable-wsl`
+   z UAC; błąd wirtualizacji → zrozumiały komunikat. Po restarcie
+   (i bez restartu, jeśli funkcje już były) — `wsl --install
+   --no-distribution` jako zwykły użytkownik. Jeśli
    wymagany restart → „Uruchom ponownie komputer” + wpis
    `HKCU\…\RunOnce` (rejestrowany przez proces zwykłego użytkownika, więc
    po restarcie wznawia się jako ten użytkownik, w tym samym kroku).
@@ -254,10 +329,13 @@ Ten sam exe pełni role wybierane argumentem:
 - Przy starcie: odczytuje IP Windowsa, woła `bpp-ctl start --hosts …`,
   uruchamia przekaźnik sieciowy (4.5), ikonka pokazuje stan
   (uruchamianie / działa / błąd), dymek „BPP działa”.
-- Utrzymuje proces `wsl.exe -d BPP` przy życiu, dopóki BPP ma działać
-  (WSL wyłącza dystrybucję bez aktywnej sesji — do weryfikacji, patrz 7).
+- Z `systemd=true` dystrybucja nie gaśnie po zamknięciu ostatniej sesji
+  `wsl.exe` — działa do `wsl --terminate`. Proces podtrzymujący prawdopodobnie
+  zbędny; do weryfikacji (§7).
 - Reaguje na zmianę adresów sieciowych (`NetworkChange.NetworkAddressChanged`):
   przepina przekaźnik i woła `bpp-ctl start --hosts …` z nową listą.
+- Zamknięcie ikonki (Zatrzymaj, wylogowanie) → `bpp-ctl stop` przed
+  `wsl --terminate BPP`.
 - Menu:
   - **Otwórz BPP** → przeglądarka na `https://localhost:8443/`,
   - **Pokaż logi** → okno z `bpp-ctl logs` (przewijane, przycisk „Kopiuj
@@ -269,8 +347,8 @@ Ten sam exe pełni role wybierane argumentem:
 
 **Tryb deinstalacji (`--uninstall`)**, jako zwykły użytkownik:
 `wsl --unregister BPP` (dane i dysk), katalogi `%LOCALAPPDATA%\BPP`
-i `%LOCALAPPDATA%\Programs\BPP` (exe usuwa się z opóźnieniem, np. przez
-`cmd /c timeout & rmdir`), skrót, wpis odinstalowania, ewentualny
+i `%LOCALAPPDATA%\Programs\BPP` (działający `BPP.exe` usuwa się
+z opóźnieniem, np. przez `cmd /c timeout & rmdir`), skrót, wpis odinstalowania, ewentualny
 `RunOnce`. Jeśli reguła zapory istnieje → jedno zadanie z UAC
 `remove-firewall`; odmowa → reguła zostaje (nieszkodliwa — dotyczy
 nieistniejącego już exe) i komunikat o tym. **Nie** odinstalowuje samego
@@ -279,18 +357,14 @@ WSL.
 ### 4.5 Dostęp z sieci lokalnej — przekaźnik w ikonce
 
 WSL2 domyślnie w NAT: `localhost:8443` działa automatycznie
-(localhostForwarding WSL), ale z LAN nie. Zamiast `netsh interface
-portproxy` (wymaga admina przy każdej zmianie IP dystrybucji, która
-następuje przy każdym starcie WSL) — **decyzja Claude:** ikonka sama jest
-przekaźnikiem TCP. Nasłuchuje na `<IP-LAN>:8443` dla każdego adresu
+(localhostForwarding WSL), ale z LAN nie. **Decyzja Claude:** ikonka sama
+jest przekaźnikiem TCP (bez admina, bez zależności od zmiennego IP
+dystrybucji). Nasłuchuje na `<IP-LAN>:8443` dla każdego adresu
 interfejsu z listy hostów (nie na `0.0.0.0` i nie na `127.0.0.1`, żeby nie
 kolidować z localhostForwarding WSL) i przekazuje surowy strumień TCP
 (TLS kończy nginx w dystrybucji) do `127.0.0.1:8443`. Nasłuch na porcie
 > 1024 nie wymaga admina; zaporę otwiera jednorazowo reguła programowa dla
 `BPP.exe`. Przekaźnik żyje tyle, co ikonka — czyli tyle, co BPP.
-
-Skutki: brak zadania harmonogramu, brak portproxy, nic do odświeżania
-z uprawnieniami admina.
 
 Uwaga: adres klienta widziany przez nginx/Django to adres lokalny
 (przekaźnik), nie prawdziwy adres w LAN — dla instancji testowej bez
@@ -357,42 +431,45 @@ Pełne kryteria z sekcji 6 wykonuje człowiek na Windowsie x64 wg listy;
 budujący przygotowuje ją jako checklistę w `docs/`.
 
 
-- Czy dystrybucja z systemd i dockerem jest wyłączana przez WSL po
-  zamknięciu ostatniej sesji `wsl.exe` (i po jakim czasie) — czy ikonka
-  musi trzymać proces podtrzymujący.
+- Czy dystrybucja z systemd i dockerem rzeczywiście nie gaśnie po
+  zamknięciu ostatniej sesji `wsl.exe` (oczekiwane: nie gaśnie).
+- Czy localhostForwarding WSL widzi port publikowany przez dockerd
+  (userland-proxy) w dystrybucji.
+- Czy po włączeniu funkcji przez admina zwykły użytkownik może sam
+  wykonać `wsl --install --no-distribution` bez UAC.
+- DNS w WSL pod VPN-em (zepsuty `resolv.conf`) — obecnie tylko komunikat
+  o błędzie pobierania.
 - Czy przekaźnik ikonki na `<IP-LAN>:8443` współistnieje z localhostForwarding
   WSL na `127.0.0.1:8443` (Windows a wiązanie konkretnych adresów vs
   wildcard).
 - Czy reguła zapory programowa dla exe w `%LOCALAPPDATA%` wystarcza
   i czy Windows nie pokazuje mimo to własnego monitu zapory.
-- Czy `wsl --install` uruchomione z konta admina (UAC innej osoby)
-  instaluje WSL tak, że zwykły użytkownik może go od razu używać.
 - Czy `wsl --install` na Windows 10 wymaga restartu zawsze, czy zależnie
   od stanu; zachowanie `RunOnce` przy podniesionych uprawnieniach.
-- HSTS (1 rok) z `production.py` zostaje w przeglądarce dla `localhost` —
-  może przeszkadzać w innych lokalnych projektach użytkownika na
-  `http://localhost`. Do oceny; ewentualnie nadpisać nagłówek w naszym
-  nginx (`Strict-Transport-Security` usunięty/`max-age=0`).
 
 ## 8. Decyzje podjęte przez Claude (do przejrzenia)
 
 - Debian + systemd + docker-ce w dystrybucji; użytkownik root domyślny.
 - Port 8443, tylko HTTPS, bez publikowania 80 i QUIC.
 - Obrazy BPP przypięte do tagu datowego podanego przy budowie.
-- Własny nginx zamiast reużycia konfiguracji bpp-deploy.
+- Własny nginx: zwykły obraz `nginx`, konfiguracja od zera, bez HSTS.
+- 7 usług (bez authservera); limity pamięci ~4,5 GB łącznie;
+  `restart: unless-stopped`.
+- Dwa exe: mały `BPP.exe` + `BPP-Setup.exe` z doklejonym ładunkiem.
 - Lista hostów i certyfikat odświeżane przy każdym starcie z IP odczytanych
   po stronie Windowsa; brak zmian w repo `bpp`.
 - .NET 8 WinForms, jeden exe z osadzonym rootfs, trzy tryby
   (instalator / ikonka / deinstalacja) + krótkie tryby `--elevated`.
-- Zapora tylko dla profili Prywatny i Domena.
+- Zapora dla profili Prywatny, Domena i Publiczny (tylko `BPP.exe`, TCP 8443).
 - Instalacja per-użytkownik (`asInvoker`, `%LOCALAPPDATA%`, HKCU);
-  UAC tylko w osobnych procesach potomnych: instalacja WSL, zapora.
+  UAC tylko w osobnych procesach potomnych: włączenie funkcji WSL, zapora;
+  pakiet WSL instaluje zwykły użytkownik.
 - Dostęp z LAN przez przekaźnik TCP wbudowany w ikonkę zamiast
-  `netsh portproxy` i zadania harmonogramu.
+  `netsh portproxy`.
 - Certyfikat self-signed ważny 10 lat.
 - „Pokaż logi” dodane do menu; bez „Aktualizuj”.
 - Podpis kodu jako wyłączony krok builda.
-- Minimalne wymagania: ostrzeżenie < 8 GB RAM, odmowa < 25 GB dysku.
+- Minimalne wymagania: odmowa < 8 GB RAM i < 25 GB dysku.
 - Brak obsługi proxy HTTP i trybu offline; czytelny błąd + „Spróbuj ponownie”.
 
 ## 9. Pozostawione budującemu
@@ -401,4 +478,5 @@ budujący przygotowuje ją jako checklistę w `docs/`.
 - Dokładny format zdarzeń JSON `bpp-ctl` (w ramach opisanego kontraktu).
 - Wygląd okna (w granicach: logo BPP, pasek postępu, etykieta kroku,
   rozwijane szczegóły).
-- Które lokacje z `_bpp-locations.conf` są potrzebne w uproszczonym nginx.
+- Szczegóły `nginx.conf` (w granicach 4.3) i dokładne wartości limitów
+  pamięci po pomiarze.
