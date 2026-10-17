@@ -8,7 +8,7 @@ set -Eeuo pipefail
 
 BPP_HOME="${BPP_HOME:-/opt/bpp}"
 export BPP_HOME
-_CTL_LIB="$(cd "$(dirname "${BASH_SOURCE[0]}")/../lib" && pwd)"
+_CTL_LIB="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib" && pwd)"
 # shellcheck source-path=SCRIPTDIR/../lib source=events.sh
 source "$_CTL_LIB/events.sh"
 # shellcheck source-path=SCRIPTDIR/../lib source=hosts.sh
