@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Atrapa `docker` do testow bpp-ctl. Loguje argv do $MOCK_DOCKER_LOG.
+# Sterowanie: MOCK_IMAGES (lista obrazow, \n), MOCK_HEALTH (starting|healthy|unhealthy|absent),
+# MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC.
+echo "docker $*" >>"${MOCK_DOCKER_LOG:?}"
+args=("$@")
+if [ "${args[0]:-}" = compose ]; then
+  i=1
+  while [ "$i" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --project-directory | -f | --env-file) i=$((i + 2)) ;;
+      *) break ;;
+    esac
+  done
+  sub="${args[$i]:-}"
+  rest=("${args[@]:$((i + 1))}")
+  case "$sub" in
+    config) printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
+    up) exit "${MOCK_UP_RC:-0}" ;;
+    ps)
+      if [[ " ${rest[*]} " == *" -q "* ]]; then
+        [ "${MOCK_WEBSERVER_RUNNING:-0}" = 1 ] && echo abc123
+        exit 0
+      fi
+      h="${MOCK_HEALTH:-healthy}"
+      [ "$h" = absent ] || echo "{\"Service\":\"appserver\",\"State\":\"running\",\"Health\":\"$h\"}"
+      ;;
+    logs) echo "mock logs ${rest[*]}" ;;
+    exec | stop) ;;
+  esac
+  exit 0
+fi
+case "${args[0]:-}" in
+  pull) echo "mock pulling ${args[1]:-}"; exit "${MOCK_PULL_RC:-0}" ;;
+  version) echo "mock docker" ;;
+esac
+exit 0
