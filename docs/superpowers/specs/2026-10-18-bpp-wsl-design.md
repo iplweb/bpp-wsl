@@ -232,7 +232,7 @@ krótki `nginx.conf` pisany od zera**, nie kopia `_bpp-locations.conf`
 
 ### 4.4 Aplikacja Windows (`installer/`)
 
-.NET 8 WinForms (decyzja Claude — najprostsze, wystarczy na okno z logo
+.NET 10 LTS WinForms (decyzja Claude; pierwotnie 8, ale 8 traci wsparcie 2026-11 — najprostsze, wystarczy na okno z logo
 i paskiem), publikowane jako single-file
 (`-r win-x64 --self-contained -p:PublishSingleFile=true`).
 
@@ -458,7 +458,7 @@ budujący przygotowuje ją jako checklistę w `docs/`.
 - Dwa exe: mały `BPP.exe` + `BPP-Setup.exe` z doklejonym ładunkiem.
 - Lista hostów i certyfikat odświeżane przy każdym starcie z IP odczytanych
   po stronie Windowsa; brak zmian w repo `bpp`.
-- .NET 8 WinForms, jeden exe z osadzonym rootfs, trzy tryby
+- .NET 10 WinForms, jeden exe z osadzonym rootfs, trzy tryby
   (instalator / ikonka / deinstalacja) + krótkie tryby `--elevated`.
 - Zapora dla profili Prywatny, Domena i Publiczny (tylko `BPP.exe`, TCP 8443).
 - Instalacja per-użytkownik (`asInvoker`, `%LOCALAPPDATA%`, HKCU);
