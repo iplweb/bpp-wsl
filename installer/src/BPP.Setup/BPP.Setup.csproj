@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>BPP-Setup</AssemblyName>
+    <RootNamespace>BPP.Setup</RootNamespace>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\bpp.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\assets\bpp.ico" LogicalName="BPP.Setup.bpp.ico" />
+    <EmbeddedResource Include="..\..\assets\logo.png" LogicalName="BPP.Setup.logo.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\BPP.Core\BPP.Core.csproj" />
+    <ProjectReference Include="..\BPP.Windows\BPP.Windows.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -251,16 +251,17 @@ da).** Manifest `asInvoker` — instalator i ikonka działają jako **zwykły
 użytkownik, który kliknął**. Dystrybucje WSL są per-użytkownik, więc import,
 `bpp-ctl`, pliki, skróty i wpis odinstalowania należą do tego użytkownika.
 Uprawnienia administratora są potrzebne tylko do dwóch rzeczy i wtedy
-instalator uruchamia **osobny, krótki proces potomny z UAC**
-(`BPP-Setup.exe --elevated <zadanie> <argumenty>`), który robi tylko to
-jedno i kończy się. **Wszystkie ścieżki przekazywane są jako bezwzględne
+instalator uruchamia przez UAC (`runas`) **wyłącznie Microsoftowe
+`dism.exe` / `netsh.exe` z System32** — nigdy własne exe, bo leżą w katalogu
+zapisywalnym przez użytkownika i mogłyby zostać podmienione, zanim admin
+zatwierdzi UAC. Nie ma trybu `--elevated` *(zmienione po przeglądzie bezpieczeństwa, R8)*. **Wszystkie ścieżki przekazywane są jako bezwzględne
 argumenty** — proces z UAC może działać na innym koncie (informatyka),
 więc nigdy nie wylicza `%LOCALAPPDATA%`/HKCU sam:
 
-| Zadanie z UAC | Kiedy | Bez admina |
+| Polecenie z UAC | Kiedy | Bez admina |
 |---|---|---|
-| `enable-wsl` — włączenie funkcji Windows `Microsoft-Windows-Subsystem-Linux` i `VirtualMachinePlatform` (DISM) | tylko gdy ich brak | nie da się — komunikat „Poproś administratora o włączenie WSL” |
-| `firewall <ścieżka-bezwzględna-BPP.exe>` — reguła zapory przychodzącej dla programu, TCP 8443, profile Prywatny + Domena + **Publiczny** | raz, przy instalacji | BPP działa tylko na tym komputerze (`localhost`); w menu ikonki pozycja „Udostępnij w sieci lokalnej…” ponawia próbę |
+| `dism.exe` (enable-wsl) — włączenie funkcji Windows `Microsoft-Windows-Subsystem-Linux` i `VirtualMachinePlatform` (DISM) | tylko gdy ich brak | nie da się — komunikat „Poproś administratora o włączenie WSL” |
+| `netsh.exe` (firewall, ścieżka bezwzględna BPP.exe) — reguła zapory przychodzącej dla programu, TCP 8443, profile Prywatny + Domena + **Publiczny** | raz, przy instalacji | BPP działa tylko na tym komputerze (`localhost`); w menu ikonki pozycja „Udostępnij w sieci lokalnej…” ponawia próbę |
 
 Sam pakiet WSL (`wsl --install --no-distribution` / `wsl --update`)
 instaluje **zwykły użytkownik** po restarcie — pakiet sklepowy WSL bywa
@@ -459,10 +460,10 @@ budujący przygotowuje ją jako checklistę w `docs/`.
 - Lista hostów i certyfikat odświeżane przy każdym starcie z IP odczytanych
   po stronie Windowsa; brak zmian w repo `bpp`.
 - .NET 10 WinForms, jeden exe z osadzonym rootfs, trzy tryby
-  (instalator / ikonka / deinstalacja) + krótkie tryby `--elevated`.
+  (instalator / ikonka / deinstalacja) (`BPP.exe` odrzuca nieznane argumenty kodem 2; UAC tylko dla System32 `dism.exe`/`netsh.exe`). *(zmienione po przeglądzie bezpieczeństwa, R8)*
 - Zapora dla profili Prywatny, Domena i Publiczny (tylko `BPP.exe`, TCP 8443).
 - Instalacja per-użytkownik (`asInvoker`, `%LOCALAPPDATA%`, HKCU);
-  UAC tylko w osobnych procesach potomnych: włączenie funkcji WSL, zapora;
+  UAC tylko dla System32 `dism.exe` (funkcje WSL) i `netsh.exe` (zapora);
   pakiet WSL instaluje zwykły użytkownik.
 - Dostęp z LAN przez przekaźnik TCP wbudowany w ikonkę zamiast
   `netsh portproxy`.

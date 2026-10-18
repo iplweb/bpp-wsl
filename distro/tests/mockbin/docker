@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# Atrapa `docker` do testow bpp-ctl. Loguje argv do $MOCK_DOCKER_LOG.
+# Sterowanie: MOCK_IMAGES (lista obrazow, \n), MOCK_HEALTH (starting|healthy|unhealthy|absent),
+# MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC, MOCK_CONFIG_RC,
+# MOCK_DOCKER_INFO_FAILS=N (pierwsze N wywolan `docker info` konczy sie bledem - demon jeszcze nie wstal).
+# Jak prawdziwy compose: `config` bez state/hosts.env (env_file) konczy sie bledem.
+echo "docker $*" >>"${MOCK_DOCKER_LOG:?}"
+args=("$@")
+if [ "${args[0]:-}" = compose ]; then
+  i=1
+  while [ "$i" -lt "${#args[@]}" ]; do
+    case "${args[$i]}" in
+      --project-directory | -f | --env-file) i=$((i + 2)) ;;
+      *) break ;;
+    esac
+  done
+  sub="${args[$i]:-}"
+  rest=("${args[@]:$((i + 1))}")
+  case "$sub" in
+    config)
+      [ -f "${BPP_HOME:?}/state/hosts.env" ] || {
+        echo "env file $BPP_HOME/state/hosts.env not found" >&2
+        exit 1
+      }
+      [ "${MOCK_CONFIG_RC:-0}" = 0 ] || exit "$MOCK_CONFIG_RC"
+      printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
+    up) [ -z "${MOCK_UP_SLEEP:-}" ] || sleep "$MOCK_UP_SLEEP"; exit "${MOCK_UP_RC:-0}" ;;
+    ps)
+      if [[ " ${rest[*]} " == *" -q "* ]]; then
+        [ "${MOCK_WEBSERVER_RUNNING:-0}" = 1 ] && echo abc123
+        exit 0
+      fi
+      h="${MOCK_HEALTH:-healthy}"
+      [ "$h" = absent ] || echo "{\"Service\":\"appserver\",\"State\":\"running\",\"Health\":\"$h\"}"
+      ;;
+    logs) echo "mock logs ${rest[*]}" ;;
+    exec | stop) ;;
+  esac
+  exit 0
+fi
+case "${args[0]:-}" in
+  pull) echo "mock pulling ${args[1]:-}"; exit "${MOCK_PULL_RC:-0}" ;;
+  version) echo "mock docker" ;;
+  info)
+    # licznik w pliku: kazde wywolanie atrapy to nowy proces
+    counter="${MOCK_DOCKER_LOG}.info-calls"
+    n=$(($(cat "$counter" 2>/dev/null || echo 0) + 1))
+    echo "$n" >"$counter"
+    if [ "$n" -le "${MOCK_DOCKER_INFO_FAILS:-0}" ]; then
+      echo "Cannot connect to the Docker daemon" >&2
+      exit 1
+    fi
+    echo "mock docker info"
+    ;;
+esac
+exit 0

@@ -1,0 +1,29 @@
+# Nieprzetestowane: repo nie ma jeszcze zdalnego GitHuba (patrz README.md).
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: installer/global.json
+      - name: Testy jednostkowe
+        run: dotnet test installer -c Release
+      - name: Build
+        run: dotnet build installer/BPP.sln -c Release
+      - name: Publish BPP.exe
+        run: >
+          dotnet publish installer/src/BPP.Tray -c Release -r win-x64 --self-contained
+          -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
+          -o dist/tray
+      - name: Smoke - nieznany argument konczy sie kodem 2 bez UI
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\tray\BPP.exe -ArgumentList '--bogus' -Wait -PassThru
+          if ($p.ExitCode -ne 2) { throw "Oczekiwano kodu 2, jest $($p.ExitCode)" }

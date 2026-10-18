@@ -1,0 +1,6 @@
+dist/
+bin/
+obj/
+distro/rootfs/opt/bpp/state/
+distro/tests/.tmp/
+!distro/rootfs/opt/bpp/bin/

@@ -1,0 +1,176 @@
+#!/usr/bin/env bash
+# bpp-ctl - jedyny punkt wejscia dla aplikacji Windows:
+#   wsl -d BPP -u root -- /opt/bpp/bin/bpp-ctl <polecenie>
+# stdout: wylacznie linie JSON (emit) - wyjatki: `status` (jedna linia JSON) i `logs`
+# (zwykly tekst). Logi dla ludzi i wyjscie dockera ida na stderr.
+# Kod wyjscia != 0 <=> ostatnie zdarzenie to "error".
+set -Eeuo pipefail
+
+BPP_HOME="${BPP_HOME:-/opt/bpp}"
+export BPP_HOME
+_CTL_LIB="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../lib" && pwd)"
+# shellcheck source-path=SCRIPTDIR/../lib source=events.sh
+source "$_CTL_LIB/events.sh"
+# shellcheck source-path=SCRIPTDIR/../lib source=hosts.sh
+source "$_CTL_LIB/hosts.sh"
+# shellcheck source-path=SCRIPTDIR/../lib source=cert.sh
+source "$_CTL_LIB/cert.sh"
+# shellcheck source-path=SCRIPTDIR/../lib source=state.sh
+source "$_CTL_LIB/state.sh"
+# shellcheck source-path=SCRIPTDIR/../lib source=pull.sh
+source "$_CTL_LIB/pull.sh"
+
+export LC_NUMERIC=C
+
+fail() {
+  emit error null "$1"
+  exit 1
+}
+
+trap 'fail "Nieoczekiwany błąd bpp-ctl (linia $LINENO)"' ERR
+
+# appserver_health -> starting|healthy|unhealthy|absent
+appserver_health() {
+  local json health state
+  json="$(bpp_compose ps --all --format json appserver 2>/dev/null || true)"
+  [ -n "$json" ] || {
+    echo absent
+    return 0
+  }
+  health="$(jq -rs 'flatten | .[0].Health // ""' <<<"$json" 2>/dev/null || true)"
+  state="$(jq -rs 'flatten | .[0].State // ""' <<<"$json" 2>/dev/null || true)"
+  case "$health" in
+    starting | healthy | unhealthy) echo "$health" ;;
+    *) if [ "$state" = running ] || [ "$state" = restarting ]; then echo starting; else echo absent; fi ;;
+  esac
+}
+
+# wait_docker [event] - czeka (do BPP_DOCKER_WAIT_TIMEOUT s, domyslnie 60), az demon Dockera
+# odpowie na `docker info`: przy zimnym starcie dystrybucji dockerd moze jeszcze nie wstac.
+# Z "event" komunikat idzie tez jako zdarzenie config (init/start); bez - tylko na stderr
+# (stop: stdout ma zostac pusty).
+wait_docker() {
+  local timeout="${BPP_DOCKER_WAIT_TIMEOUT:-60}" interval="${BPP_DOCKER_WAIT_INTERVAL:-1}" deadline
+  docker info >/dev/null 2>&1 && return 0
+  deadline=$((SECONDS + timeout))
+  echo "Oczekiwanie na uruchomienie Dockera (do $timeout s)..." >&2
+  [ "${1:-}" != event ] || emit config null "Oczekiwanie na uruchomienie Dockera"
+  until docker info >/dev/null 2>&1; do
+    ((SECONDS < deadline)) || fail "Docker nie wystartował w ciągu $timeout s"
+    sleep "$interval"
+  done
+}
+
+wait_healthy() {
+  local interval="${BPP_HEALTH_INTERVAL:-5}" h
+  while :; do
+    h="$(appserver_health)"
+    case "$h" in
+      healthy) return 0 ;;
+      unhealthy) fail "Aplikacja BPP zgłosiła stan unhealthy" ;;
+    esac
+    ((SECONDS < DEADLINE)) || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${BPP_HEALTH_TIMEOUT:-1800} s)"
+    sleep "$interval"
+  done
+}
+
+# parse_hosts <args...> -> ustawia HOSTS
+parse_hosts() {
+  HOSTS=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --hosts)
+        [ "$#" -ge 2 ] || fail "Brak wartości dla --hosts"
+        HOSTS="$2"
+        shift 2
+        ;;
+      *) fail "Nieznany argument: $1" ;;
+    esac
+  done
+  [ -n "$HOSTS" ] || fail "Wymagany argument --hosts <lista>"
+  hosts_validate "$HOSTS" || fail "Nieprawidłowa lista hostów: $HOSTS"
+}
+
+# ensure_hosts_config - certyfikat, state/hosts.env i state/hosts dla $HOSTS;
+# regeneruje tylko przy zmianie listy hostow albo braku plikow.
+# Ustawia CERT_CHANGED=1, gdy cos wygenerowano (init -> start: flaga przetrwa,
+# wiec nginx zostanie przeladowany, jesli juz dziala).
+CERT_CHANGED=0
+ensure_hosts_config() {
+  if state_hosts_changed "$HOSTS" || [ ! -f "$BPP_HOME/state/ssl/cert.pem" ] || [ ! -f "$BPP_HOME/state/hosts.env" ]; then
+    CERT_CHANGED=1
+    emit cert null "Generowanie certyfikatu dla: $HOSTS"
+    cert_generate "$HOSTS" "$BPP_HOME/state/ssl" || fail "Nie udało się wygenerować certyfikatu"
+    hosts_render_env "$HOSTS" >"$BPP_HOME/state/hosts.env" || fail "Nie udało się zapisać hosts.env"
+    printf '%s\n' "$HOSTS" >"$BPP_HOME/state/hosts"
+  fi
+}
+
+cmd_start() {
+  local web_running="" rc
+  parse_hosts "$@"
+  hwclock -s 2>/dev/null || true
+  emit config null "Sprawdzanie konfiguracji"
+  [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
+  wait_docker event
+
+  ensure_hosts_config
+
+  web_running="$(bpp_compose ps --status running -q webserver 2>/dev/null || true)"
+  emit start null "Uruchamianie usług"
+  # `up -d` blokuje na zdrowiu appservera (depends_on), czyli na migracjach:
+  # migrate emitujemy przed nim, a calosc ograniczamy wspolnym limitem czasu.
+  emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
+  DEADLINE=$((SECONDS + ${BPP_HEALTH_TIMEOUT:-1800}))
+  export -f bpp_compose
+  rc=0
+  timeout "${BPP_HEALTH_TIMEOUT:-1800}" bash -c 'bpp_compose up -d >&2' || rc=$?
+  [ "$rc" -ne 124 ] || fail "Przekroczono limit czasu oczekiwania na start aplikacji (${BPP_HEALTH_TIMEOUT:-1800} s)"
+  [ "$rc" -eq 0 ] || fail "docker compose up nie powiodło się"
+  if [ "$CERT_CHANGED" = 1 ] && [ -n "$web_running" ]; then
+    bpp_compose exec -T webserver nginx -s reload >&2 || fail "Nie udało się przeładować nginx"
+  fi
+
+  wait_healthy
+  emit ready 1 "BPP jest gotowe: https://localhost:8443"
+}
+
+cmd_init() {
+  parse_hosts "$@"
+  emit config null "Przygotowanie konfiguracji"
+  wait_docker event
+  state_ensure_env || fail "Nie udało się utworzyć state/.env (brak image-tag?)"
+  # compose (config --images) wymaga plikow env_file, w tym state/hosts.env.
+  ensure_hosts_config
+  pull_with_progress || fail "Pobieranie obrazów nie powiodło się"
+  cmd_start --hosts "$HOSTS"
+}
+
+cmd_stop() {
+  wait_docker
+  bpp_compose stop >&2 || fail "docker compose stop nie powiodło się"
+}
+
+cmd_status() {
+  local h running=false state=""
+  h="$(appserver_health)"
+  [ "$h" = absent ] ||
+    state="$(bpp_compose ps --format json appserver 2>/dev/null | jq -rs 'flatten | .[0].State // ""' 2>/dev/null || true)"
+  [ "$state" = running ] && running=true
+  jq -cn --argjson running "$running" --arg health "$h" '{running: $running, health: $health}'
+}
+
+cmd_logs() {
+  bpp_compose logs --tail 500 --no-color "$@" || fail "docker compose logs nie powiodło się"
+}
+
+main() {
+  local cmd="${1:-}"
+  [ "$#" -eq 0 ] || shift
+  case "$cmd" in
+    init | start | stop | status | logs) "cmd_$cmd" "$@" ;;
+    *) fail "Nieznane polecenie: '${cmd}' (init|start|stop|status|logs)" ;;
+  esac
+}
+
+main "$@"

@@ -1,0 +1,161 @@
+# Stos BPP dla dystrybucji WSL. Uruchamiany przez bpp-ctl:
+#   docker compose --env-file state/.env ...
+# BPP_IMAGE_TAG pochodzi z state/.env (przypiety przy budowie dystrybucji).
+name: bpp
+
+x-django: &django
+  restart: unless-stopped
+  env_file: [state/.env, state/hosts.env]
+
+services:
+  dbserver:
+    image: postgres:18.4
+    restart: unless-stopped
+    env_file: [state/.env]
+    entrypoint: ["bash", "/usr/local/bin/docker-entrypoint-autotune.sh"]
+    command: ["postgres"]
+    environment:
+      POSTGRES_DB: ${DJANGO_BPP_DB_NAME}
+      POSTGRES_USER: ${DJANGO_BPP_DB_USER}
+      POSTGRES_PASSWORD: ${DJANGO_BPP_DB_PASSWORD}
+      # Pin: postgres 18+ domyslnie uzywa /var/lib/postgresql/<major>/docker.
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=pl-PL"
+    volumes:
+      - ./dbserver/docker-entrypoint-autotune.sh:/usr/local/bin/docker-entrypoint-autotune.sh:ro
+      - ./dbserver/autotune.sh:/autotune.sh:ro
+      - postgresql_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  redis:
+    image: redis:8.6.2
+    restart: unless-stopped
+    command: ["redis-server", "--maxmemory", "200mb", "--maxmemory-policy", "allkeys-lru"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      start_period: 3s
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - redis:/data
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  appserver:
+    <<: *django
+    image: iplweb/bpp_appserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
+    environment:
+      DJANGO_BPP_DB_HOST: dbserver
+      DJANGO_BPP_DB_PORT: "5432"
+    volumes:
+      - staticfiles:/staticroot
+      - media:/mediaroot
+    depends_on:
+      redis:
+        condition: service_healthy
+      dbserver:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health/"]
+      interval: 10s
+      timeout: 5s
+      start_period: 1800s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1536m
+
+  workerserver:
+    <<: *django
+    image: iplweb/bpp_workerserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
+    environment:
+      CELERY_QUEUE: "celery,denorm"
+      CELERY_WORKER_CONCURRENCY_PERCENT: "25"
+    volumes:
+      - staticfiles:/staticroot
+      - media:/mediaroot
+    depends_on:
+      appserver:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+
+  celerybeat:
+    <<: *django
+    image: iplweb/bpp_beatserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
+    volumes:
+      - staticfiles:/staticroot
+      - media:/mediaroot
+    depends_on:
+      redis:
+        condition: service_healthy
+      appserver:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -f /app/healthcheck_beat.py ]; then exec python /app/healthcheck_beat.py; else exec python /app/healthcheck_broker.py; fi"]
+      interval: 10s
+      timeout: 10s
+      start_period: 300s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  denorm-queue:
+    <<: *django
+    image: iplweb/bpp_denorm_queue:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
+    depends_on:
+      workerserver:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+
+  webserver:
+    image: nginx:1.28
+    restart: unless-stopped
+    ports:
+      - "8443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./state/ssl:/etc/nginx/ssl:ro
+      - staticfiles:/var/www/html/staticroot:ro
+      - media:/var/www/html/mediaroot:ro
+    depends_on:
+      appserver:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://127.0.0.1/healthz"]
+      interval: 10s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128m
+
+volumes:
+  postgresql_data:
+  redis:
+  staticfiles:
+  media:
