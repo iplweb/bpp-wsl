@@ -41,6 +41,16 @@ _pull_ratio() {
   LC_NUMERIC=C awk -v i="$1" -v n="$2" -v f="$3" 'BEGIN { printf "%.4f", (i + f) / n }'
 }
 
+# _pull_msg <image> <i> <n> -> "Pobieranie obrazu <image> (i+1 z n)"
+_pull_msg() {
+  echo "Pobieranie obrazu $1 ($(($2 + 1)) z $3)"
+}
+
+# _pull_fmt <frac> -> ulamek z 4 miejscami (pole "item" zdarzenia)
+_pull_fmt() {
+  LC_NUMERIC=C awk -v f="$1" 'BEGIN { printf "%.4f", f }'
+}
+
 # _pull_image_socket <image> <i> <n>
 _pull_image_socket() {
   local img="$1" i="$2" n="$3" repo tag
@@ -71,7 +81,7 @@ _pull_consume() {
     maxf="$(LC_NUMERIC=C awk -v a="$maxf" -v b="$rest" 'BEGIN { print (b > a ? b : a) }')"
     if ((SECONDS - last >= every)); then
       last=$SECONDS
-      emit pull "$(_pull_ratio "$i" "$n" "$maxf")" "Pobieranie obrazu $img"
+      emit pull "$(_pull_ratio "$i" "$n" "$maxf")" "$(_pull_msg "$img" "$i" "$n")" "$(_pull_fmt "$maxf")"
     fi
   done
 }
@@ -90,13 +100,13 @@ pull_with_progress() {
   }
   _pull_use_socket && use_socket=1
   for img in "${images[@]}"; do
-    emit pull "$(_pull_ratio "$i" "$n" 0)" "Pobieranie obrazu $img"
+    emit pull "$(_pull_ratio "$i" "$n" 0)" "$(_pull_msg "$img" "$i" "$n")" 0
     if [ "$use_socket" = 1 ]; then
       _pull_image_socket "$img" "$i" "$n" || return 1
     else
       docker pull "$img" >&2 || return 1
     fi
     i=$((i + 1))
-    emit pull "$(_pull_ratio "$i" "$n" 0)" "Pobrano obraz $img"
+    emit pull "$(_pull_ratio "$i" "$n" 0)" "Pobrano obraz $img ($i z $n)" 1
   done
 }

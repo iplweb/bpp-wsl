@@ -84,6 +84,7 @@ internal sealed class InstallerFlow
                     return;
                 }
                 _ui.AppendLog($"--- {step}");
+                _ui.SetOverall(InstallProgress.AtStart(step));
                 _state = (await RunStepAsync(step)) with { Completed = step };
             }
         }
@@ -402,7 +403,8 @@ internal sealed class InstallerFlow
                 else
                 {
                     if (ev.Step == "ready") ready = true;
-                    _ui.SetStatus(ev.Message, ev.Progress);
+                    _ui.SetStatus(ev.Message, ev.Item); // upper bar: the image being pulled
+                    _ui.SetOverall(InstallProgress.DuringInit(ev));
                 }
             }
             if (cts.IsCancellationRequested) return InitOutcome.Cancelled;

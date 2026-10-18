@@ -23,7 +23,11 @@ public static class BppEventParser
                 ? m.GetString() ?? ""
                 : "";
 
-            ev = new BppEvent(step.GetString()!, progress, message);
+            double? item = null;
+            if (root.TryGetProperty("item", out var it) && it.ValueKind == JsonValueKind.Number)
+                item = it.GetDouble();
+
+            ev = new BppEvent(step.GetString()!, progress, message, item);
             return true;
         }
         catch (JsonException)

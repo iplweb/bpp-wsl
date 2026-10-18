@@ -162,3 +162,53 @@ public class RelayAddressesTests
         Assert.Equal(new[] { IPAddress.Parse("172.16.0.1") }, r);
     }
 }
+
+public class InstallProgressTests
+{
+    [Fact]
+    public void Item_is_parsed_and_optional()
+    {
+        Assert.True(BppEventParser.TryParse("{\"step\":\"pull\",\"progress\":0.5,\"message\":\"x\",\"item\":0.25}", out var e));
+        Assert.Equal(0.25, e!.Item);
+        Assert.True(BppEventParser.TryParse("{\"step\":\"pull\",\"progress\":0.5,\"message\":\"x\"}", out var f));
+        Assert.Null(f!.Item);
+    }
+
+    [Fact]
+    public void Steps_move_the_bar_forward_in_the_order_of_a_full_install()
+    {
+        var order = new[]
+        {
+            InstallerStep.Preflight, InstallerStep.ExtractTray, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl,
+            InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit, InstallerStep.AddFirewall,
+            InstallerStep.CreateShortcut, InstallerStep.Done,
+        };
+        var at = order.Select(InstallProgress.AtStart).ToList();
+        Assert.Equal(at.OrderBy(x => x), at);
+        Assert.Equal(0, at[0]);
+        Assert.Equal(1, at[^1]);
+    }
+
+    [Fact]
+    public void Init_events_stay_inside_the_init_slice_and_pull_takes_most_of_it()
+    {
+        var events = new[]
+        {
+            new BppEvent("config", null, ""), new BppEvent("cert", null, ""), new BppEvent("pull", 0, ""),
+            new BppEvent("pull", 0.5, ""), new BppEvent("pull", 1, ""), new BppEvent("start", null, ""),
+            new BppEvent("migrate", null, ""), new BppEvent("ready", 1, ""),
+        };
+        var at = events.Select(InstallProgress.DuringInit).ToList();
+        Assert.Equal(at.OrderBy(x => x), at);
+        Assert.True(at[0] >= InstallProgress.AtStart(InstallerStep.RunInit));
+        Assert.True(at[^1] <= InstallProgress.AtStart(InstallerStep.AddFirewall));
+        Assert.True(at[4] - at[2] > 0.5); // the pull is the long part of the install
+    }
+
+    [Fact]
+    public void Pull_progress_out_of_range_is_clamped()
+    {
+        Assert.Equal(InstallProgress.DuringInit(new BppEvent("pull", 1, "")), InstallProgress.DuringInit(new BppEvent("pull", 7, "")));
+        Assert.Equal(InstallProgress.DuringInit(new BppEvent("pull", 0, "")), InstallProgress.DuringInit(new BppEvent("pull", null, "")));
+    }
+}

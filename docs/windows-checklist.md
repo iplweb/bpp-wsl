@@ -69,6 +69,10 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **15.** (0.1.1) „Szczegóły ▸” wydłuża okno w dół (nie ściska strony),
   „Szczegóły ▾” przywraca wysokość; przy 150% DPI okno nie wychodzi poza ekran.
   Wynik:
+- [ ] **16.** (0.1.2) Dwa paski: górny pokazuje bieżący obraz („Pobieranie obrazu
+  … (3 z 7)”, od 0 do 100% dla każdego obrazu; przy innych krokach animacja),
+  dolny „Cała instalacja: NN%” rośnie przez całą instalację i nigdy się nie cofa.
+  Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
 

@@ -112,6 +112,8 @@ internal sealed class SetupForm : Form
 
     public void SetStatus(string text, double? fraction) => _progress.SetStatus(text, fraction);
 
+    public void SetOverall(double fraction) => _progress.SetOverall(fraction);
+
     /// <summary>Thread-safe: WslClient raises LogLine from its stdout and stderr pumps concurrently.</summary>
     public void AppendLog(string line)
     {

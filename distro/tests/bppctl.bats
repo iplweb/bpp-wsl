@@ -112,6 +112,9 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ "$status" -eq 0 ]
   p=$(printf '%s\n' "${lines[@]}" | jq -sr 'map(.progress*10000|round)|join(",")')
   [ "$p" = "5000,5000,7000,7000" ]
+  items=$(printf '%s\n' "${lines[@]}" | jq -sr 'map(.item*10000|round)|join(",")')
+  [ "$items" = "5000,5000,7000,7000" ]
+  [ "$(printf '%s\n' "${lines[@]}" | jq -sr '.[0].message')" = "Pobieranie obrazu img (1 z 1)" ]
 }
 
 @test "nginx reload only when cert changed and webserver already running" {
@@ -169,6 +172,9 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   for img in iplweb/bpp_appserver:t1 postgres:18.4 redis:8.6.2; do grep -qx "docker pull $img" "$MOCK_DOCKER_LOG"; done
   p=$(printf '%s\n' "${lines[@]}" | jq -sr '[.[]|select(.step=="pull").progress]|map(.*10000|round|tostring)|join(",")')
   [ "$p" = "0,3333,3333,6667,6667,10000" ]
+  items=$(printf '%s\n' "${lines[@]}" | jq -sr '[.[]|select(.step=="pull").item|tostring]|join(",")')
+  [ "$items" = "0,1,0,1,0,1" ]
+  printf '%s\n' "${lines[@]}" | jq -se 'any(.[]; .message == "Pobieranie obrazu postgres:18.4 (2 z 3)")'
 }
 
 @test "pull failure -> error event, exit 1" {
