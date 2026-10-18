@@ -45,6 +45,12 @@ internal static class Program
             entries.Add((arg[..eq], arg[(eq + 1)..]));
         }
 
+        if (string.Equals(Path.GetFullPath(args[0]), Path.GetFullPath(args[1]), StringComparison.OrdinalIgnoreCase))
+        {
+            Console.Error.WriteLine("Plik wejściowy i wyjściowy muszą być różne.");
+            return 2;
+        }
+
         try
         {
             File.Copy(args[0], args[1], overwrite: true);

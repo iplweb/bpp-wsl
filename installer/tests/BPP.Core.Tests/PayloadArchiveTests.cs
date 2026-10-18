@@ -124,6 +124,27 @@ public sealed class PayloadArchiveTests : IDisposable
     }
 
     [Fact]
+    public void Pack_SameInputAndOutput_IsUsageErrorAndKeepsInput()
+    {
+        var original = Random(100, 30);
+        var setup = Write("setup.exe", original);
+        var good = Write("good.bin", Random(10, 31));
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+        };
+        foreach (var a in new[] { Path.Combine(AppContext.BaseDirectory, "BPP.Pack.dll"), setup, Path.Combine(_dir, ".", "SETUP.exe"), $"ok={good}" })
+            psi.ArgumentList.Add(a);
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        p.StandardOutput.ReadToEnd();
+        p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        Assert.Equal(2, p.ExitCode);
+        Assert.Equal(original, File.ReadAllBytes(setup));
+    }
+
+    [Fact]
     public void ReadIndex_NoPayload_Throws()
     {
         var exe = Write("plain.exe", Random(5000, 9));
