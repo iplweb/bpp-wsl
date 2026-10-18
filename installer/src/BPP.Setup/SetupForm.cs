@@ -38,11 +38,13 @@ internal sealed class SetupForm : Form
 
         Text = Caption;
         Icon = _icon;
+        // Layout is in 96-DPI units; WinForms scales the window and pages at 125–150 % DPI.
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
         ClientSize = new Size(560, 420);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        AutoScaleMode = AutoScaleMode.Dpi;
 
         _content = new Panel { Dock = DockStyle.Fill };
         var logo = new PictureBox
@@ -153,6 +155,7 @@ internal sealed class SetupForm : Form
     private void RequestCancel()
     {
         if (_flow is not { InitRunning: true }) return;
+        // the flow keeps running while the dialog is open: init may have ended meanwhile (CancelInit is then a no-op)
         if (ConfirmCancel()) _flow.CancelInit();
     }
 
@@ -171,10 +174,19 @@ internal sealed class SetupForm : Form
             e.Cancel = true;
             if (_flow.InitRunning)
             {
+                // the flow keeps running while the dialog is open: re-check what it is doing now
                 if (ConfirmCancel())
                 {
-                    _closeWhenFinished = true;
-                    _flow.CancelInit();
+                    if (_flow.InitRunning)
+                    {
+                        _closeWhenFinished = true;
+                        _flow.CancelInit();
+                    }
+                    else if (!_flow.IsRunning)
+                    {
+                        BeginInvoke(Close); // init and the flow ended meanwhile: nothing left to cancel
+                    }
+                    // else: init ended and a non-interruptible step runs now; the window stays open
                 }
             }
             else

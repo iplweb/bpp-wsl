@@ -1,6 +1,5 @@
 using System.Net;
 using System.Net.NetworkInformation;
-using System.Net.Sockets;
 using BPP.Core;
 using BPP.Windows;
 using Microsoft.Win32;
@@ -121,7 +120,7 @@ internal sealed class TrayContext : ApplicationContext
         try
         {
             if (_closing) return;
-            var hosts = CurrentHosts();
+            var hosts = LocalHosts.Current();
             if (!force && _startedHosts != null && hosts.SequenceEqual(_startedHosts))
             {
                 await UpdateRelayAsync(hosts);
@@ -189,28 +188,6 @@ internal sealed class TrayContext : ApplicationContext
         if (!_closing) Fire(() => StartAsync(force: false));
     }
 
-    private static IReadOnlyList<string> CurrentHosts()
-    {
-        var interfaces = new List<NetInterface>();
-        foreach (var n in NetworkInterface.GetAllNetworkInterfaces())
-        {
-            try
-            {
-                var ipv4 = n.GetIPProperties().UnicastAddresses
-                    .Select(u => u.Address)
-                    .Where(a => a.AddressFamily == AddressFamily.InterNetwork)
-                    .ToList();
-                interfaces.Add(new NetInterface(n.Name, n.Description, n.OperationalStatus == OperationalStatus.Up,
-                    n.NetworkInterfaceType == NetworkInterfaceType.Loopback, ipv4));
-            }
-            catch (NetworkInformationException)
-            {
-                // interface vanished while enumerating
-            }
-        }
-        return HostList.From(interfaces);
-    }
-
     // ---- LAN relay ------------------------------------------------------------------------------------
 
     /// <summary>Only after the firewall rule exists: binding LAN addresses without it shows a security alert.</summary>
@@ -257,7 +234,7 @@ internal sealed class TrayContext : ApplicationContext
 
         _share.Visible = false;
         EnableRelay();
-        await UpdateRelayAsync(_startedHosts ?? CurrentHosts());
+        await UpdateRelayAsync(_startedHosts ?? LocalHosts.Current());
         _tray.ShowBalloonTip(5000, "BPP", "BPP jest dostępne w sieci lokalnej.", ToolTipIcon.Info);
     }
 

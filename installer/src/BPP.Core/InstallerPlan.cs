@@ -6,6 +6,7 @@ public enum InstallerStep
     // actions
     Preflight,
     ExtractTray,
+    RegisterUninstall,
     CheckWsl,
     EnableWsl,
     InstallWslPackage,
@@ -17,7 +18,7 @@ public enum InstallerStep
     RunInit,
     StopDistro,
     AddFirewall,
-    Register,
+    CreateShortcut,
 
     // final pages
     Done,
@@ -70,7 +71,9 @@ public static class InstallerPlan
     {
         null => InstallerStep.Preflight,
         InstallerStep.Preflight => s.PreflightOk ? InstallerStep.ExtractTray : InstallerStep.PreflightFailed,
-        InstallerStep.ExtractTray => InstallerStep.CheckWsl,
+        // Right after BPP.exe exists, so a partial or cancelled install can be removed from Settings.
+        InstallerStep.ExtractTray => InstallerStep.RegisterUninstall,
+        InstallerStep.RegisterUninstall => InstallerStep.CheckWsl,
         InstallerStep.CheckWsl => s.WslReady ? InstallerStep.CheckDistro : WslMissing(s),
         InstallerStep.EnableWsl => s.EnableWsl switch
         {
@@ -95,8 +98,8 @@ public static class InstallerPlan
             _ => InstallerStep.StopDistro,
         },
         InstallerStep.StopDistro => s.Init == InitOutcome.Cancelled ? InstallerStep.Cancelled : InstallerStep.InitFailed,
-        InstallerStep.AddFirewall => InstallerStep.Register, // refusal only means localhost-only
-        InstallerStep.Register => InstallerStep.Done,
+        InstallerStep.AddFirewall => InstallerStep.CreateShortcut, // refusal only means localhost-only
+        InstallerStep.CreateShortcut => InstallerStep.Done,
         var final => throw new InvalidOperationException($"{final} jest stroną końcową, nie krokiem."),
     };
 

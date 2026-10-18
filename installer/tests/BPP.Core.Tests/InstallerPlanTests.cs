@@ -22,7 +22,13 @@ public class InstallerPlanTests
     public void Preflight_ok_extracts_tray_before_wsl()
         => Assert.Equal(S.ExtractTray, InstallerPlan.Next(After(S.Preflight) with { PreflightOk = true }));
 
-    [Fact] public void Tray_then_wsl_check() => Assert.Equal(S.CheckWsl, InstallerPlan.Next(After(S.ExtractTray)));
+    [Fact]
+    public void Tray_then_uninstall_entry_so_partial_installs_are_removable()
+        => Assert.Equal(S.RegisterUninstall, InstallerPlan.Next(After(S.ExtractTray)));
+
+    [Fact]
+    public void Uninstall_entry_then_wsl_check()
+        => Assert.Equal(S.CheckWsl, InstallerPlan.Next(After(S.RegisterUninstall)));
 
     // ---- 3. WSL ----
 
@@ -97,7 +103,7 @@ public class InstallerPlanTests
             s = step switch
             {
                 S.Preflight => s with { Completed = step, PreflightOk = true },
-                S.ExtractTray => s with { Completed = step },
+                S.ExtractTray or S.RegisterUninstall => s with { Completed = step },
                 S.CheckWsl => s with { Completed = step, WslReady = s.EnableWsl == EnableWslOutcome.Ok && s.WslPackageInstallAttempted },
                 S.EnableWsl => s with { Completed = step, EnableWsl = EnableWslOutcome.Ok },
                 S.InstallWslPackage => s with { Completed = step, WslPackageInstallAttempted = true },
@@ -107,7 +113,7 @@ public class InstallerPlanTests
         }
         Assert.Equal(new[]
         {
-            S.Preflight, S.ExtractTray, S.CheckWsl, S.EnableWsl, S.InstallWslPackage, S.CheckWsl, S.CheckDistro,
+            S.Preflight, S.ExtractTray, S.RegisterUninstall, S.CheckWsl, S.EnableWsl, S.InstallWslPackage, S.CheckWsl, S.CheckDistro,
         }, seen);
     }
 
@@ -215,13 +221,13 @@ public class InstallerPlanTests
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
-    public void Firewall_refusal_still_registers(bool firewallOk)
-        => Assert.Equal(S.Register, InstallerPlan.Next(After(S.AddFirewall) with
+    public void Firewall_refusal_still_creates_shortcut(bool firewallOk)
+        => Assert.Equal(S.CreateShortcut, InstallerPlan.Next(After(S.AddFirewall) with
         {
             Init = InitOutcome.Ready, FirewallOk = firewallOk,
         }));
 
-    [Fact] public void Register_then_done() => Assert.Equal(S.Done, InstallerPlan.Next(After(S.Register)));
+    [Fact] public void Shortcut_then_done() => Assert.Equal(S.Done, InstallerPlan.Next(After(S.CreateShortcut)));
 
     [Theory]
     [InlineData(S.Done)]
@@ -236,6 +242,7 @@ public class InstallerPlanTests
     [Theory]
     [InlineData(S.Preflight)]
     [InlineData(S.RunInit)]
-    [InlineData(S.Register)]
+    [InlineData(S.RegisterUninstall)]
+    [InlineData(S.CreateShortcut)]
     public void Actions_are_not_final(S step) => Assert.False(InstallerPlan.IsFinal(step));
 }

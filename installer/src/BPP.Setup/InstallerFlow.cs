@@ -28,6 +28,7 @@ internal sealed class InstallerFlow
     private IReadOnlyList<string> _preflightProblems = Array.Empty<string>();
     private int? _dismExitCode;
     private string _lastError = "";
+    private string _lastImportError = "";
     private CancellationTokenSource? _initCts;
 
     public InstallerFlow(SetupForm ui, string setupExe, IReadOnlyDictionary<string, PayloadEntry> payload)
@@ -45,7 +46,13 @@ internal sealed class InstallerFlow
 
     public void CancelInit() => _initCts?.Cancel();
 
-    public Task RunAsync() => LoopAsync();
+    public Task RunAsync()
+    {
+        // A stale "--resume" entry (e.g. the user ran Setup by hand after the restart) must not fire again later.
+        try { _registration.ClearRunOnce(); }
+        catch (Exception ex) { _ui.AppendLog("RunOnce: " + ex.Message); }
+        return LoopAsync();
+    }
 
     public Task RetryAsync()
     {
@@ -162,11 +169,13 @@ internal sealed class InstallerFlow
                 _ui.AppendLog("Zapora: " + (code?.ToString() ?? "odmowa UAC"));
                 return s with { FirewallOk = code == 0 };
 
-            case Step.Register:
-                _ui.SetStatus("Tworzenie skrótu i wpisu odinstalowania…", null);
-                _registration.CreateStartMenuShortcut(AppPaths.TrayExe); // COM: stays on the STA UI thread
+            case Step.RegisterUninstall:
                 _registration.RegisterUninstall(AppPaths.TrayExe, Version);
-                _registration.ClearRunOnce();
+                return s;
+
+            case Step.CreateShortcut:
+                _ui.SetStatus("Tworzenie skrótu w Menu Start…", null);
+                _registration.CreateStartMenuShortcut(AppPaths.TrayExe); // COM: stays on the STA UI thread
                 return s;
 
             default:
@@ -188,25 +197,19 @@ internal sealed class InstallerFlow
                 _ui.ShowError("Ten komputer nie spełnia wymagań BPP", _preflightProblems, canRetry: false);
                 break;
             case Step.WslNeedsAdmin:
-                _ui.ShowError("Nie można włączyć WSL", new[]
-                {
+                _ui.ShowError("Nie można włączyć WSL", WithImportError(
                     "Poproś administratora o włączenie WSL (lub o zatwierdzenie okna administratora), " +
-                    "a potem uruchom instalator ponownie.",
-                }, canRetry: false);
+                    "a potem uruchom instalator ponownie."), canRetry: false);
                 break;
             case Step.WslEnableFailed:
-                _ui.ShowError("Nie udało się włączyć WSL", new[]
-                {
+                _ui.ShowError("Nie udało się włączyć WSL", WithImportError(
                     $"Narzędzie DISM zakończyło się kodem {_dismExitCode}.",
-                    "Uruchom ponownie komputer i spróbuj jeszcze raz.",
-                }, canRetry: false);
+                    "Uruchom ponownie komputer i spróbuj jeszcze raz."), canRetry: false);
                 break;
             case Step.WslUnavailable:
-                _ui.ShowError("WSL nie działa na tym komputerze", new[]
-                {
+                _ui.ShowError("WSL nie działa na tym komputerze", WithImportError(
                     "Uruchom ponownie komputer i uruchom instalator jeszcze raz.",
-                    "Jeśli to nie pomoże, sprawdź, czy wirtualizacja jest włączona w BIOS/UEFI.",
-                }, canRetry: false);
+                    "Jeśli to nie pomoże, sprawdź, czy wirtualizacja jest włączona w BIOS/UEFI."), canRetry: false);
                 break;
             case Step.ImportFailed:
                 _ui.ShowError("Nie udało się zainstalować dystrybucji BPP", new[] { _lastError }, canRetry: false);
@@ -234,6 +237,12 @@ internal sealed class InstallerFlow
                 throw new InvalidOperationException($"Nieznana strona {step}.");
         }
     }
+
+    /// <summary>When these pages follow a failed <c>wsl --import</c>, its real error is shown too.</summary>
+    private IReadOnlyList<string> WithImportError(params string[] lines)
+        => _lastImportError.Length == 0
+            ? lines
+            : lines.Append("Błąd importu dystrybucji: " + _lastImportError).ToList();
 
     // ---- steps ----------------------------------------------------------------------------------------
 
@@ -319,8 +328,9 @@ internal sealed class InstallerFlow
             }
             catch (InvalidOperationException ex)
             {
-                _lastError = ex.Message;
+                _lastError = _lastImportError = ex.Message;
                 _ui.AppendLog(ex.Message);
+                await RemovePartialDistroAsync();
                 return false;
             }
         }
@@ -375,6 +385,16 @@ internal sealed class InstallerFlow
             _initCts = null;
             _ui.SetCancelEnabled(false);
         }
+    }
+
+    /// <summary>A failed import may leave BPP registered; remove it so a retry is not asked "Zainstalować ponownie?".</summary>
+    private async Task RemovePartialDistroAsync()
+    {
+        try
+        {
+            if (await _wsl.DistroExistsAsync()) await _wsl.UnregisterAsync();
+        }
+        catch (Exception ex) { _ui.AppendLog("Usuwanie niepełnej dystrybucji: " + ex.Message); }
     }
 
     /// <summary>Cancelling the init client does not stop bpp-ctl inside the VM: `bpp-ctl stop`, then terminate.</summary>
