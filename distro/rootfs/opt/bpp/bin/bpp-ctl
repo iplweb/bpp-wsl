@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # bpp-ctl - jedyny punkt wejscia dla aplikacji Windows:
 #   wsl -d BPP -u root -- /opt/bpp/bin/bpp-ctl <polecenie>
-# stdout: wylacznie linie JSON (emit) - wyjatki: `status` (jedna linia JSON) i `logs`
-# (zwykly tekst). Logi dla ludzi i wyjscie dockera ida na stderr.
+# stdout: wylacznie linie JSON (emit) - wyjatki: `status` (jedna linia JSON), `logs`, `diag`
+# i `compose` (zwykly tekst). Logi dla ludzi i wyjscie dockera ida na stderr.
 # Kod wyjscia != 0 <=> ostatnie zdarzenie to "error".
 set -Eeuo pipefail
 
@@ -74,7 +74,8 @@ wait_healthy() {
   done
 }
 
-# parse_hosts <args...> -> ustawia HOSTS
+# parse_hosts <args...> -> ustawia HOSTS. Z PARSE_HOSTS_DEFAULT_SAVED=1 (start) brak --hosts
+# oznacza liste z ostatniego uruchomienia (state/hosts) - do recznego `bpp-ctl start`.
 parse_hosts() {
   HOSTS=""
   while [ "$#" -gt 0 ]; do
@@ -87,6 +88,9 @@ parse_hosts() {
       *) fail "Nieznany argument: $1" ;;
     esac
   done
+  if [ -z "$HOSTS" ] && [ "${PARSE_HOSTS_DEFAULT_SAVED:-0}" = 1 ] && [ -s "$BPP_HOME/state/hosts" ]; then
+    HOSTS="$(head -n 1 "$BPP_HOME/state/hosts")"
+  fi
   [ -n "$HOSTS" ] || fail "Wymagany argument --hosts <lista>"
   hosts_validate "$HOSTS" || fail "Nieprawidłowa lista hostów: $HOSTS"
 }
@@ -108,7 +112,7 @@ ensure_hosts_config() {
 
 cmd_start() {
   local web_running="" rc
-  parse_hosts "$@"
+  PARSE_HOSTS_DEFAULT_SAVED=1 parse_hosts "$@"
   hwclock -s 2>/dev/null || true
   emit config null "Sprawdzanie konfiguracji"
   [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
@@ -164,12 +168,64 @@ cmd_logs() {
   bpp_compose logs --tail 500 --no-color "$@" || fail "docker compose logs nie powiodło się"
 }
 
+# compose <args...> - docker compose tego stosu (state/.env, project-directory) do recznej pracy:
+#   wsl -d BPP bpp-ctl compose ps | logs workerserver | up -d
+cmd_compose() {
+  trap - ERR
+  wait_docker
+  exec docker compose --project-directory "$BPP_HOME" -f "$BPP_HOME/docker-compose.yml" \
+    --env-file "$BPP_HOME/state/.env" "$@"
+}
+
+# diag - raport diagnostyczny (zwykly tekst na stdout) do zgloszenia w IPLweb. Nigdy nie konczy sie
+# bledem: kazda sekcja dziala osobno. Bez sekretow: nie pokazuje state/.env ani `compose config`.
+cmd_diag() {
+  trap - ERR
+  set +e
+  _section() {
+    printf '\n===== %s =====\n' "$1"
+    shift
+    "$@" 2>&1
+    local rc=$?
+    [ "$rc" -eq 0 ] || echo "(kod wyjścia: $rc)"
+  }
+  echo "BPP - diagnostyka ($(date -Is 2>/dev/null || date))"
+  _section "System" bash -c 'uname -a; grep PRETTY_NAME /etc/os-release; uptime; nproc'
+  _section "Pamięć" free -m
+  _section "Dysk" df -h / /var/lib/docker
+  _section "Konfiguracja BPP (bez haseł)" bash -c '
+    echo "image-tag: $(cat "$BPP_HOME/image-tag" 2>/dev/null)"
+    grep -E "^BPP_IMAGE_TAG=" "$BPP_HOME/state/.env" 2>/dev/null
+    echo "hosts: $(cat "$BPP_HOME/state/hosts" 2>/dev/null)"
+    ls -l "$BPP_HOME/state" 2>/dev/null'
+  _section "Usługa docker" systemctl --no-pager status docker
+  if ! timeout 60 bash -c 'until docker info >/dev/null 2>&1; do sleep 1; done'; then
+    echo
+    echo "Docker nie odpowiada - pomijam sekcje kontenerów."
+    _section "Dziennik dockerd" journalctl -u docker --no-pager -n 200
+    return 0
+  fi
+  _section "Docker" docker version
+  _section "Obrazy" docker images
+  _section "Kontenery (compose ps -a)" bpp_compose ps --all
+  _section "Healthcheck kontenerów" bash -c '
+    for c in $(docker ps -aq --filter label=com.docker.compose.project=bpp); do
+      docker inspect --format "{{.Name}}: state={{.State.Status}} exit={{.State.ExitCode}} oom={{.State.OOMKilled}} restarts={{.RestartCount}} started={{.State.StartedAt}}" "$c"
+      docker inspect --format "{{if .State.Health}}{{range .State.Health.Log}}  [{{.ExitCode}}] {{.Start}} {{printf \"%.300s\" .Output}}{{println}}{{end}}{{end}}" "$c"
+    done'
+  _section "Zużycie zasobów" docker stats --no-stream --no-trunc
+  _section "Logi usług (ostatnie 1000 linii każdej)" bpp_compose logs --tail 1000 --timestamps --no-color
+  _section "Dziennik dockerd" journalctl -u docker --no-pager -n 200
+  _section "Jądro (OOM)" bash -c 'dmesg 2>/dev/null | grep -iE "oom|killed process" | tail -n 50'
+  return 0
+}
+
 main() {
   local cmd="${1:-}"
   [ "$#" -eq 0 ] || shift
   case "$cmd" in
-    init | start | stop | status | logs) "cmd_$cmd" "$@" ;;
-    *) fail "Nieznane polecenie: '${cmd}' (init|start|stop|status|logs)" ;;
+    init | start | stop | status | logs | diag | compose) "cmd_$cmd" "$@" ;;
+    *) fail "Nieznane polecenie: '${cmd}' (init|start|stop|status|logs|diag|compose)" ;;
   esac
 }
 

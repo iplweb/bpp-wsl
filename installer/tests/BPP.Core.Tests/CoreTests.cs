@@ -212,3 +212,38 @@ public class InstallProgressTests
         Assert.Equal(InstallProgress.DuringInit(new BppEvent("pull", 0, "")), InstallProgress.DuringInit(new BppEvent("pull", null, "")));
     }
 }
+
+public class SupportMailTests
+{
+    [Theory]
+    [InlineData("DJANGO_BPP_DB_PASSWORD=abc123", "DJANGO_BPP_DB_PASSWORD=***")]
+    [InlineData("SECRET_KEY = 'x y'", "SECRET_KEY = ***")]
+    [InlineData("auth token: deadbeef rest", "auth token: *** rest")]
+    [InlineData("redis://user:hunter2@redis:6379/1", "redis://user:***@redis:6379/1")]
+    [InlineData("postgres://bpp:p4ss@dbserver/bpp ok", "postgres://bpp:***@dbserver/bpp ok")]
+    public void Redact_masks_secrets(string input, string expected)
+        => Assert.Equal(expected, SupportMail.Redact(input));
+
+    [Theory]
+    [InlineData("appserver-1  | GET /health/ 200")]
+    [InlineData("password reset view loaded")]
+    [InlineData("https://localhost:8443/setup/")]
+    public void Redact_keeps_ordinary_log_lines(string line)
+        => Assert.Equal(line, SupportMail.Redact(line));
+
+    [Fact]
+    public void Zip_name_is_sortable_and_has_no_spaces()
+        => Assert.Equal("BPP-diagnostyka-20261018-093005.zip", SupportMail.ZipFileName(new DateTime(2026, 10, 18, 9, 30, 5)));
+
+    [Fact]
+    public void Mailto_targets_support_and_escapes_subject_and_body()
+    {
+        var uri = SupportMail.MailtoUri("BPP-diagnostyka-1.zip", "0.1.4");
+        Assert.StartsWith("mailto:support@iplweb.pl?subject=", uri);
+        Assert.DoesNotContain(" ", uri);
+        Assert.DoesNotContain("\n", uri);
+        var body = Uri.UnescapeDataString(uri[(uri.IndexOf("&body=", StringComparison.Ordinal) + 6)..]);
+        Assert.Contains("BPP-diagnostyka-1.zip", body);
+        Assert.Contains("0.1.4", Uri.UnescapeDataString(uri));
+    }
+}

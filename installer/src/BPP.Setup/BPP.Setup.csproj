@@ -16,6 +16,7 @@
     <EmbeddedResource Include="..\..\assets\bpp.ico" LogicalName="BPP.Setup.bpp.ico" />
     <EmbeddedResource Include="..\..\assets\logo.png" LogicalName="BPP.Setup.logo.png" />
     <EmbeddedResource Include="..\..\assets\logo-iplweb.png" LogicalName="BPP.Setup.logo-iplweb.png" />
+    <EmbeddedResource Include="..\..\assets\LICENSE-BPP.txt" LogicalName="BPP.Setup.LICENSE-BPP.txt" />
   </ItemGroup>
 
   <ItemGroup>

@@ -31,6 +31,7 @@ internal sealed class InstallerFlow
     private string _lastError = "";
     private string _lastImportError = "";
     private CancellationTokenSource? _initCts;
+    private string? _failureDiag; // bpp-ctl diag taken after a failed init, before the stack was stopped
 
     public InstallerFlow(SetupForm ui, string setupExe, IReadOnlyDictionary<string, PayloadEntry> payload)
     {
@@ -176,6 +177,12 @@ internal sealed class InstallerFlow
                 return s with { Init = await RunInitAsync() };
 
             case Step.StopDistro:
+                if (s.Init == InitOutcome.Failed)
+                {
+                    // the healthcheck history of the containers is what support needs; stopping them loses it
+                    _ui.SetStatus("Zbieranie diagnostyki…", null);
+                    _failureDiag = await Diagnostics.BppDiagAsync(_wsl, stopDistroIfStarted: false);
+                }
                 _ui.SetStatus(s.Init == InitOutcome.Cancelled ? "Przerywanie — zatrzymywanie BPP…" : "Zatrzymywanie BPP…", null);
                 await StopDistroAsync();
                 return s;
@@ -242,7 +249,14 @@ internal sealed class InstallerFlow
                 _ui.ShowError("Konfiguracja BPP nie powiodła się", new[]
                 {
                     _lastError,
-                    "Sprawdź połączenie z internetem i kliknij „Spróbuj ponownie”.",
+                    "Kliknij „Spróbuj ponownie”. Obrazy, które już się pobrały, nie są pobierane drugi raz — " +
+                    "jeśli pobieranie się udało, ponowienie tylko uruchomi usługi.",
+                    "Usługi możesz też uruchomić ręcznie: otwórz Wiersz polecenia (cmd) lub PowerShell i wpisz:\r\n" +
+                    "    wsl -d BPP bpp-ctl start\r\n" +
+                    "Stan usług:  wsl -d BPP bpp-ctl compose ps\r\n" +
+                    "Logi usługi: wsl -d BPP bpp-ctl compose logs workerserver\r\n" +
+                    "Gdy usługi działają, kliknij „Spróbuj ponownie”, aby dokończyć instalację (skrót, zapora).",
+                    "Jeśli problem się powtarza, kliknij „Wyślij diagnostykę do IPLweb…”.",
                 }, canRetry: true);
                 break;
             case Step.Declined:
@@ -451,6 +465,10 @@ internal sealed class InstallerFlow
         try { await _wsl.TerminateAsync(); }
         catch (Exception ex) { _ui.AppendLog("wsl --terminate: " + ex.Message); }
     }
+
+    /// <summary>The diagnostics ZIP for support (see <see cref="Diagnostics.CreateZipAsync"/>); not while the flow runs.</summary>
+    public Task<string> CreateDiagnosticsZipAsync(string log)
+        => Diagnostics.CreateZipAsync("instalator", log, _wsl, _failureDiag, stopDistroIfStarted: true);
 
     private static string Version
         => typeof(InstallerFlow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";

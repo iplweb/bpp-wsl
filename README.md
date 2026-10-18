@@ -51,7 +51,9 @@ przeszedł jeszcze pełnych testów na Windowsie — problemy zgłaszaj w
 
 ## Instalacja krok po kroku
 
-1. Pobierz `BPP-Setup-<wersja>.exe` i kliknij go dwukrotnie.
+1. Pobierz `BPP-Setup-<wersja>.exe` i kliknij go dwukrotnie. Przeczytaj
+   licencję MIT oprogramowania BPP i zaznacz jej akceptację (BPP jest
+   dostarczane „tak jak jest”, bez gwarancji i bez odpowiedzialności autora).
 2. Jeśli Windows pokaże niebieskie okno **„System Windows ochronił ten
    komputer”**, kliknij **Więcej informacji → Uruchom mimo to**. (Pojawia się,
    bo program nie jest jeszcze podpisany.)
@@ -108,8 +110,36 @@ wersji również zaczyna od czystej bazy.
 - **„Port 8443 jest zajęty”** — instalator podpowie, co go używa; jeśli to
   stare BPP, kliknij **Zatrzymaj BPP**.
 - **Za mało pamięci/miejsca** — instalator odmówi i powie, czego brakuje.
-- **Inne błędy** — menu ikonki → **Pokaż logi** → skopiuj i dołącz do
-  zgłoszenia w [Issues](https://github.com/iplweb/bpp-wsl/issues).
+- **Usługi BPP nie wstały** („Konfiguracja BPP nie powiodła się”) — kliknij
+  **Spróbuj ponownie**. Obrazy, które już się pobrały, nie są pobierane drugi
+  raz, więc ponowienie po udanym pobieraniu tylko uruchamia usługi.
+
+### Wysłanie diagnostyki do IPLweb
+
+Na stronie błędu instalatora, w menu ikonki BPP i w oknie logów jest
+**Wyślij diagnostykę do IPLweb…**. Program zapisuje na Pulpicie plik
+`BPP-diagnostyka-<data>.zip` (logi programu i usług BPP, stan kontenerów,
+informacje o komputerze i WSL — **bez haseł**), pokazuje go w Eksploratorze
+i otwiera gotową wiadomość do **support@iplweb.pl**. Dołącz plik do
+wiadomości i kliknij Wyślij. Jeśli używasz poczty w przeglądarce, wyślij
+ten plik na support@iplweb.pl samodzielnie.
+
+### Ręczna obsługa usług
+
+W Wierszu polecenia (cmd) lub PowerShellu:
+
+| Polecenie | Co robi |
+|---|---|
+| `wsl -d BPP bpp-ctl start` | uruchamia usługi BPP (bez pobierania obrazów) |
+| `wsl -d BPP bpp-ctl compose ps` | stan usług |
+| `wsl -d BPP bpp-ctl compose logs workerserver` | logi jednej usługi (`appserver`, `workerserver`, `webserver`, `dbserver`, …) |
+| `wsl -d BPP bpp-ctl compose up -d` | `docker compose up -d` tego stosu |
+| `wsl -d BPP bpp-ctl compose restart workerserver` | restart jednej usługi |
+| `wsl -d BPP bpp-ctl diag` | pełny raport diagnostyczny (ten sam, który trafia do ZIP-a) |
+| `wsl -d BPP bpp-ctl stop` | zatrzymuje usługi |
+
+Po ręcznym uruchomieniu usług w trakcie instalacji kliknij w instalatorze
+**Spróbuj ponownie** — dokończy instalację (skrót w Menu Start, zapora).
 
 ## Jak to działa w środku
 

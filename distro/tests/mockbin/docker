@@ -2,6 +2,7 @@
 # Atrapa `docker` do testow bpp-ctl. Loguje argv do $MOCK_DOCKER_LOG.
 # Sterowanie: MOCK_IMAGES (lista obrazow, \n), MOCK_HEALTH (starting|healthy|unhealthy|absent),
 # MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC, MOCK_CONFIG_RC,
+# MOCK_PRESENT_IMAGES (obrazy "juz pobrane" dla `docker image inspect`, oddzielone spacja),
 # MOCK_DOCKER_INFO_FAILS=N (pierwsze N wywolan `docker info` konczy sie bledem - demon jeszcze nie wstal).
 # Jak prawdziwy compose: `config` bez state/hosts.env (env_file) konczy sie bledem.
 echo "docker $*" >>"${MOCK_DOCKER_LOG:?}"
@@ -39,6 +40,9 @@ if [ "${args[0]:-}" = compose ]; then
   exit 0
 fi
 case "${args[0]:-}" in
+  image)
+    [ "${args[1]:-}" = inspect ] && [[ " ${MOCK_PRESENT_IMAGES:-} " == *" ${args[2]:-} "* ]] && exit 0
+    exit 1 ;;
   pull) echo "mock pulling ${args[1]:-}"; exit "${MOCK_PULL_RC:-0}" ;;
   version) echo "mock docker" ;;
   info)

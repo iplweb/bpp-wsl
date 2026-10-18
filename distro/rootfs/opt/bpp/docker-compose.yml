@@ -83,7 +83,10 @@ services:
     image: iplweb/bpp_workerserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     environment:
       CELERY_QUEUE: "celery,denorm"
-      CELERY_WORKER_CONCURRENCY_PERCENT: "25"
+      # Stala liczba procesow zamiast procentu rdzeni: kazdy to pelna kopia Django (~250 MB), wiec na
+      # laptopie z 16 watkami 25% dawalo 4 dzieci + rodzic > limit 1g -> OOM i unhealthy.
+      CELERY_WORKER_CONCURRENCY: "2"
+      CELERY_WORKER_MAX_MEMORY_PER_CHILD: "300000"
     volumes:
       - staticfiles:/staticroot
       - media:/mediaroot
@@ -92,6 +95,14 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    # healthcheck obrazu (celery inspect ping, timeout 10s, start 120s) bywa za ciasny na pierwszym starcie
+    # w WSL na slabszym komputerze
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A django_bpp.celery_tasks inspect ping --destination celery@$$HOSTNAME"]
+      interval: 15s
+      timeout: 30s
+      start_period: 300s
+      retries: 5
     deploy:
       resources:
         limits:
@@ -122,9 +133,11 @@ services:
   denorm-queue:
     <<: *django
     image: iplweb/bpp_denorm_queue:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
+    # service_started, nie service_healthy: niezdrowy worker nie moze blokowac `up` calego stosu
+    # (aplikacja dziala bez niego; jego stan widac w `bpp-ctl diag`)
     depends_on:
       workerserver:
-        condition: service_healthy
+        condition: service_started
     deploy:
       resources:
         limits:

@@ -78,6 +78,23 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   przeglądarce. Przy 125–150% DPI loga nie są ucięte ani rozciągnięte.
   Ekran powitalny mówi, że to instalacja do testów.
   Wynik:
+- [ ] **18.** (0.1.4) Ekran powitalny pokazuje licencję MIT BPP; „Zainstaluj” jest
+  nieaktywne do zaznaczenia zgody.
+  Wynik:
+- [ ] **19.** (0.1.4) Nieudany start usług: strona błędu ma „Pokaż logi” (duże okno,
+  rozciągalne, maksymalizowalne) i „Wyślij diagnostykę do IPLweb…”: ZIP na
+  Pulpicie (windows.txt, instalator-log.txt, bpp-diag.txt,
+  bpp-diag-przed-zatrzymaniem.txt — bez haseł), Eksplorator z zaznaczonym
+  plikiem, nowa wiadomość do support@iplweb.pl. To samo z menu ikonki i okna logów.
+  Wynik:
+- [ ] **20.** (0.1.4) „Spróbuj ponownie” po nieudanym starcie nie pobiera obrazów
+  ponownie („Obraz … jest już pobrany”); polecenia z strony błędu
+  (`wsl -d BPP bpp-ctl start`, `… compose ps`, `… compose logs workerserver`)
+  działają w cmd i PowerShellu.
+  Wynik:
+- [ ] **21.** (0.1.4) workerserver dochodzi do healthy na laptopie z wieloma rdzeniami
+  (wcześniej unhealthy blokował start).
+  Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
 

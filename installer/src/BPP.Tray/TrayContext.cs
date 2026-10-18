@@ -74,6 +74,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             open,
             new ToolStripMenuItem("Pokaż logi", null, (_, _) => ShowLogs()),
+            new ToolStripMenuItem("Wyślij diagnostykę do IPLweb…", null, (_, _) => SendDiagnostics(null)),
             _share,
             new ToolStripSeparator(),
             new ToolStripMenuItem("Zatrzymaj", null, (_, _) => Fire(StopAndExitAsync)),
@@ -173,7 +174,7 @@ internal sealed class TrayContext : ApplicationContext
         Log("Uruchamianie nie powiodło się: " + error);
         SetState(TipError, running: false);
         _tray.ShowBalloonTip(10000, "BPP — błąd",
-            "Nie udało się uruchomić BPP. Szczegóły: menu ikonki → „Pokaż logi”.", ToolTipIcon.Error);
+            "Nie udało się uruchomić BPP. Szczegóły: menu ikonki → „Pokaż logi” (tam też „Wyślij diagnostykę do IPLweb…”).", ToolTipIcon.Error);
     }
 
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
@@ -268,7 +269,7 @@ internal sealed class TrayContext : ApplicationContext
             _logsForm.Activate();
             return;
         }
-        var form = new LogsForm(_wsl, LogSnapshot, _icon);
+        var form = new LogsForm(_wsl, LogSnapshot, _icon, SendDiagnostics);
         form.FormClosed += (_, _) =>
         {
             if (ReferenceEquals(_logsForm, form)) _logsForm = null;
@@ -276,6 +277,18 @@ internal sealed class TrayContext : ApplicationContext
         };
         _logsForm = form;
         form.Show();
+    }
+
+    /// <summary>
+    /// The ZIP for IPLweb support. The tray keeps BPP running, so diag never stops the distro; while the tray is
+    /// closing nothing may boot it again.
+    /// </summary>
+    private async void SendDiagnostics(IWin32Window? owner)
+    {
+        if (_closing) return;
+        var log = string.Join(Environment.NewLine, LogSnapshot().Select(l => l.Text));
+        await DiagnosticsSender.SendAsync(owner,
+            () => Diagnostics.CreateZipAsync("ikonka", log, _wsl, null, stopDistroIfStarted: false));
     }
 
     // ---- stop / uninstall / logoff --------------------------------------------------------------------

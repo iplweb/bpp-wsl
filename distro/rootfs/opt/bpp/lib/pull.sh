@@ -100,6 +100,13 @@ pull_with_progress() {
   }
   _pull_use_socket && use_socket=1
   for img in "${images[@]}"; do
+    # tagi sa przypiete, wiec obraz obecny lokalnie jest wlasciwy: ponowienie po nieudanym
+    # starcie (albo drugi init) nie pobiera niczego od nowa
+    if docker image inspect "$img" >/dev/null 2>&1; then
+      i=$((i + 1))
+      emit pull "$(_pull_ratio "$i" "$n" 0)" "Obraz $img jest już pobrany ($i z $n)" 1
+      continue
+    fi
     emit pull "$(_pull_ratio "$i" "$n" 0)" "$(_pull_msg "$img" "$i" "$n")" 0
     if [ "$use_socket" = 1 ]; then
       _pull_image_socket "$img" "$i" "$n" || return 1

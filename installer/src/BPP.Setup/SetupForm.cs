@@ -43,7 +43,7 @@ internal sealed class SetupForm : Form
         // Layout is in 96-DPI units; WinForms scales the window and pages at 125–150 % DPI.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 450);
+        ClientSize = new Size(560, 500);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -62,6 +62,14 @@ internal sealed class SetupForm : Form
                       ?? throw new InvalidOperationException($"Brak zasobu {name}.");
         using var img = Image.FromStream(s);
         return new Bitmap(img); // Image.FromStream needs its stream alive; the copy does not
+    }
+
+    private static string LoadText(System.Reflection.Assembly asm, string name)
+    {
+        using var s = asm.GetManifestResourceStream("BPP.Setup." + name)
+                      ?? throw new InvalidOperationException($"Brak zasobu {name}.");
+        using var r = new StreamReader(s);
+        return r.ReadToEnd();
     }
 
     /// <summary>BPP logo on the left, IPLweb on the right, the project page link below; all open bpp.iplweb.pl.</summary>
@@ -125,7 +133,7 @@ internal sealed class SetupForm : Form
 
         _flow = new InstallerFlow(this, exe, payload);
         if (_resume) Install();
-        else ShowPage(new WelcomePage(Install));
+        else ShowPage(new WelcomePage(Install, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
     }
 
     private static IReadOnlyDictionary<string, PayloadEntry>? TryReadPayload(string exe)
@@ -150,7 +158,7 @@ internal sealed class SetupForm : Form
     /// <summary>The flow never throws (it shows the Error page); closes the window if that was requested meanwhile.</summary>
     private async void RunFlow(Func<InstallerFlow, Task> run)
     {
-        if (_flow == null || _flow.IsRunning) return;
+        if (_flow == null || _flow.IsRunning || DiagnosticsSender.IsBusy) return;
         await run(_flow);
         if (_closeWhenFinished) Close();
     }
@@ -176,10 +184,26 @@ internal sealed class SetupForm : Form
     /// <param name="canStopBpp">Offer "Zatrzymaj BPP" (port 8443 held by a running BPP distro).</param>
     public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry, bool canStopBpp = false)
     {
-        string log;
-        lock (_logLock) log = _log.ToString();
-        ShowPage(new ErrorPage(title, problems, log, canRetry ? Retry : null, Close,
+        ShowPage(new ErrorPage(title, problems, ShowLogs, () => SendDiagnostics(this), canRetry ? Retry : null, Close,
             canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp) : null));
+    }
+
+    private string LogText()
+    {
+        lock (_logLock) return _log.ToString();
+    }
+
+    private void ShowLogs()
+    {
+        var viewer = new LogViewerForm("Instalator BPP — logi", LogText(), _icon, SendDiagnostics);
+        viewer.FormClosed += (_, _) => viewer.Dispose();
+        viewer.Show(this);
+    }
+
+    private async void SendDiagnostics(IWin32Window owner)
+    {
+        if (_flow == null || _flow.IsRunning) return;
+        await DiagnosticsSender.SendAsync(owner, () => _flow.CreateDiagnosticsZipAsync(LogText()));
     }
 
     public void ShowDone(bool lanEnabled)

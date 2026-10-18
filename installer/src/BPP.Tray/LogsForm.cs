@@ -16,7 +16,7 @@ internal sealed class LogsForm : Form
     private readonly CancellationTokenSource _closed = new();
     private long _lastSeq;
 
-    public LogsForm(WslClient wsl, Func<IReadOnlyList<TrayLogLine>> trayLog, Icon icon)
+    public LogsForm(WslClient wsl, Func<IReadOnlyList<TrayLogLine>> trayLog, Icon icon, Action<IWin32Window> sendDiagnostics)
     {
         _wsl = wsl;
         _trayLog = trayLog;
@@ -24,7 +24,9 @@ internal sealed class LogsForm : Form
         Text = "BPP — logi";
         Icon = icon;
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(900, 600);
+        AutoScaleDimensions = new SizeF(96F, 96F);
+        AutoScaleMode = AutoScaleMode.Dpi;
+        Size = new Size(960, 640);
         MinimumSize = new Size(400, 250);
 
         _text = new TextBox
@@ -50,8 +52,11 @@ internal sealed class LogsForm : Form
             AutoSize = true,
             Padding = new Padding(6),
         };
+        var send = new Button { Text = "Wyślij diagnostykę do IPLweb…", AutoSize = true };
+        send.Click += (_, _) => sendDiagnostics(this);
         buttons.Controls.Add(copy);
         buttons.Controls.Add(_refresh);
+        buttons.Controls.Add(send);
 
         Controls.Add(_text);
         Controls.Add(buttons);

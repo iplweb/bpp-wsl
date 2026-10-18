@@ -157,6 +157,47 @@ check_start_idempotent() {
   fi
 }
 
+# check_worker_healthy - workerserver (stala concurrency, luzniejszy healthcheck) dochodzi do healthy.
+check_worker_healthy() {
+  local h="" i
+  for i in $(seq 1 60); do
+    h="$(compose ps --format json workerserver | jq -rs 'flatten | .[0].Health // ""')"
+    [ "$h" = healthy ] && break
+    [ "$h" = unhealthy ] && break
+    sleep 10
+  done
+  if [ "$h" = healthy ]; then pass "workerserver healthy"; else fail "workerserver: '$h'"; fi
+}
+
+# check_diag - bpp-ctl diag na prawdziwym stosie: sekcje, historia healthcheckow, brak hasla bazy.
+check_diag() {
+  local out pw
+  out="$(ctl diag 2>&1)" || {
+    fail "diag zakonczyl sie bledem"
+    return
+  }
+  printf '%s\n' "$out" >"$tmp/diag.txt"
+  pw="$(sed -n 's/^DJANGO_BPP_DB_PASSWORD=//p' "$BPP_HOME/state/.env")"
+  if [[ "$out" == *"===== Healthcheck kontenerów ====="* ]] && [[ "$out" == *"bpp-workerserver-1: state=running"* ]] &&
+    [[ "$out" == *"===== Logi usług"* ]] && [[ "$out" != *"$pw"* ]]; then
+    pass "diag ($(wc -l <"$tmp/diag.txt") linii, $tmp/diag.txt)"
+  else
+    fail "diag: brak sekcji albo widoczne haslo ($tmp/diag.txt)"
+  fi
+}
+
+# check_retry_skips_pull - ponowny init nie pobiera obrazow, ktore juz sa.
+check_retry_skips_pull() {
+  local out n
+  out="$(ctl init --hosts "$HOSTS")"
+  n="$(printf '%s\n' "$out" | jq -s '[.[] | select(.step == "pull" and (.message | test("jest już pobrany")))] | length')"
+  if [ "$n" -ge 7 ] && [ "$(printf '%s\n' "$out" | tail -n 1 | jq -r .step)" = ready ]; then
+    pass "ponowny init bez pobierania ($n obrazow juz pobranych)"
+  else
+    fail "ponowny init: $n obrazow pominietych"
+  fi
+}
+
 main() {
   log "tag obrazow: $tag, hosty: $HOSTS, BPP_HOME: $BPP_HOME"
   docker build -q -t "$image" "$repo/distro/tests" >/dev/null
@@ -169,6 +210,9 @@ main() {
   check_wizard "https://localhost:8443"
   check_no_hsts
   check_start_idempotent
+  check_worker_healthy
+  check_diag
+  check_retry_skips_pull
 
   log "Swieza baza: down -v i ponowny init"
   compose down -v --remove-orphans >&2

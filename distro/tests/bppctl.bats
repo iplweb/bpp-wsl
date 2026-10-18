@@ -292,3 +292,44 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
     ! grep -q '^docker compose' "$MOCK_DOCKER_LOG"
   done
 }
+
+@test "images already present are not pulled again" {
+  MOCK_PRESENT_IMAGES="postgres:18.4 iplweb/bpp_appserver:t1" run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(grep -c '^docker pull ' "$MOCK_DOCKER_LOG")" = 1 ]
+  grep -qx "docker pull redis:8.6.2" "$MOCK_DOCKER_LOG"
+  printf '%s\n' "${lines[@]}" | jq -se 'any(.[]; .message == "Obraz postgres:18.4 jest już pobrany (2 z 3)" and .item == 1)'
+  p=$(printf '%s\n' "${lines[@]}" | jq -sr '[.[]|select(.step=="pull").progress]|map(.*10000|round|tostring)|join(",")')
+  [ "$p" = "3333,6667,6667,10000" ]
+}
+
+@test "start without --hosts reuses the hosts of the last run" {
+  "$CTL" init --hosts localhost,192.168.1.5 >/dev/null 2>&1
+  run bash -c '"$CTL" start 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(last_step)" = ready ]
+  [ "$(cat "$WORK/state/hosts")" = "localhost,192.168.1.5" ]
+}
+
+@test "compose passes arguments through with the stack's env file" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  : >"$MOCK_DOCKER_LOG"
+  run "$CTL" compose logs workerserver
+  [ "$status" -eq 0 ]
+  [ "$output" = "mock logs workerserver" ]
+  grep -q -- "--env-file $WORK/state/.env logs workerserver" "$MOCK_DOCKER_LOG"
+}
+
+@test "diag prints sections, hides secrets and never fails" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  run "$CTL" diag
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"===== Kontenery (compose ps -a) ====="* ]]
+  [[ "$output" == *"===== Logi usług"* ]]
+  [[ "$output" == *"BPP_IMAGE_TAG=t1"* ]]
+  pw="$(sed -n 's/^DJANGO_BPP_DB_PASSWORD=//p' "$WORK/state/.env")"
+  [ -n "$pw" ]
+  [[ "$output" != *"$pw"* ]]
+  MOCK_DOCKER_INFO_FAILS=1000 run timeout 120 "$CTL" diag
+  [ "$status" -eq 0 ]
+}
