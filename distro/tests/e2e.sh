@@ -169,6 +169,28 @@ check_worker_healthy() {
   if [ "$h" = healthy ]; then pass "workerserver healthy"; else fail "workerserver: '$h'"; fi
 }
 
+# check_single_process - wersja testowa: jeden proces roboczy w workerze, nginx, gunicorn; Postgres bez
+# rownoleglosci.
+check_single_process() {
+  local pg nginx_workers celery gunicorn_workers
+  pg="$(compose exec -T dbserver psql -U bpp -d bpp -Atc \
+    "select string_agg(name||'='||setting, ',' order by name) from pg_settings where name in
+     ('max_worker_processes','max_parallel_workers','max_parallel_workers_per_gather','autovacuum_max_workers','io_workers')")"
+  nginx_workers="$(compose exec -T webserver sh -c 'ps -o args= 2>/dev/null || cat /proc/[0-9]*/cmdline | tr "\0" " "; echo' |
+    grep -c 'nginx: worker process' || true)"
+  celery="$(compose exec -T workerserver sh -c 'celery -A django_bpp.celery_tasks inspect stats --json --destination celery@$HOSTNAME' 2>/dev/null |
+    jq -r '[.[]][0].pool["max-concurrency"]' 2>/dev/null || true)"
+  gunicorn_workers="$(compose config --format json | jq -r '.services.appserver.environment.WEB_CONCURRENCY')"
+  log "dbserver: $pg; nginx workers: $nginx_workers; celery max-concurrency: $celery; WEB_CONCURRENCY: $gunicorn_workers"
+  if [ "$pg" = "autovacuum_max_workers=1,io_workers=1,max_parallel_workers=0,max_parallel_workers_per_gather=0,max_worker_processes=1" ] &&
+    [ "$celery" = 1 ] && [ "$gunicorn_workers" = 1 ]; then
+    pass "jeden proces: Postgres bez rownoleglosci, celery concurrency 1, gunicorn 1"
+  else
+    fail "jeden proces: pg='$pg' celery='$celery' gunicorn='$gunicorn_workers'"
+  fi
+  if [ "$nginx_workers" = 1 ]; then pass "nginx: jeden proces roboczy"; else fail "nginx: $nginx_workers procesow roboczych"; fi
+}
+
 # check_diag - bpp-ctl diag na prawdziwym stosie: sekcje, historia healthcheckow, brak hasla bazy.
 check_diag() {
   local out pw
@@ -211,6 +233,7 @@ main() {
   check_no_hsts
   check_start_idempotent
   check_worker_healthy
+  check_single_process
   check_diag
   check_retry_skips_pull
 

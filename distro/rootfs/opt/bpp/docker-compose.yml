@@ -13,7 +13,22 @@ services:
     restart: unless-stopped
     env_file: [state/.env]
     entrypoint: ["bash", "/usr/local/bin/docker-entrypoint-autotune.sh"]
-    command: ["postgres"]
+    # Wersja testowa: bez zapytan rownoleglych i z minimum procesow pomocniczych. Parametry -c maja
+    # pierwszenstwo przed plikiem z autotune.sh (ten liczy je od liczby rdzeni hosta).
+    command:
+      - postgres
+      - -c
+      - max_worker_processes=1
+      - -c
+      - max_parallel_workers=0
+      - -c
+      - max_parallel_workers_per_gather=0
+      - -c
+      - max_parallel_maintenance_workers=0
+      - -c
+      - autovacuum_max_workers=1
+      - -c
+      - io_workers=1
     environment:
       POSTGRES_DB: ${DJANGO_BPP_DB_NAME}
       POSTGRES_USER: ${DJANGO_BPP_DB_USER}
@@ -57,6 +72,7 @@ services:
     <<: *django
     image: iplweb/bpp_appserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     environment:
+      WEB_CONCURRENCY: "1" # wersja testowa: jeden worker gunicorna (jawnie, nie polegamy na domyslnej obrazu)
       DJANGO_BPP_DB_HOST: dbserver
       DJANGO_BPP_DB_PORT: "5432"
     volumes:
@@ -83,9 +99,9 @@ services:
     image: iplweb/bpp_workerserver:${BPP_IMAGE_TAG:?BPP_IMAGE_TAG is required}
     environment:
       CELERY_QUEUE: "celery,denorm"
-      # Stala liczba procesow zamiast procentu rdzeni: kazdy to pelna kopia Django (~250 MB), wiec na
-      # laptopie z 16 watkami 25% dawalo 4 dzieci + rodzic > limit 1g -> OOM i unhealthy.
-      CELERY_WORKER_CONCURRENCY: "2"
+      # Wersja testowa: jeden proces roboczy na wszystko (domyslnie obraz bierze % rdzeni, a kazdy
+      # proces to pelna kopia Django ~250 MB - na laptopie z 16 watkami przekraczalo to limit 1g).
+      CELERY_WORKER_CONCURRENCY: "1"
       CELERY_WORKER_MAX_MEMORY_PER_CHILD: "300000"
     volumes:
       - staticfiles:/staticroot

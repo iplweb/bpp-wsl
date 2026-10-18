@@ -92,8 +92,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   (`wsl -d BPP bpp-ctl start`, `… compose ps`, `… compose logs workerserver`)
   działają w cmd i PowerShellu.
   Wynik:
-- [ ] **21.** (0.1.4) workerserver dochodzi do healthy na laptopie z wieloma rdzeniami
-  (wcześniej unhealthy blokował start).
+- [ ] **21.** (0.1.5) workerserver dochodzi do healthy na laptopie z wieloma rdzeniami
+  (wcześniej unhealthy blokował start). Wersja testowa: jeden proces roboczy
+  w workerze (Celery), appserverze (gunicorn) i nginx; Postgres bez równoległości.
   Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
