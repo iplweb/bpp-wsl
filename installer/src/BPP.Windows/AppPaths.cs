@@ -1,10 +1,12 @@
+using BPP.Core;
+
 namespace BPP.Windows;
 
 public static class AppPaths
 {
     public const string DistroName = "BPP";
-    public const int Port = 8443;
-    public const string FirewallRuleName = "BPP (8443)";
+    public const int Port = ElevatedCommands.Port;
+    public const string FirewallRuleName = ElevatedCommands.FirewallRuleName;
 
     private static string LocalAppData => Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
 

@@ -11,28 +11,28 @@ public static class Elevation
     private const int ErrorCancelled = 1223;
 
     /// <summary>
-    /// Starts <paramref name="exePath"/> with the UAC prompt (verb runas), waits, and returns true on exit code 0.
-    /// Returns false when the user declines the prompt. UseShellExecute forbids ArgumentList, so the single
-    /// argument string is built with <see cref="ElevatedArgs.ToCommandLine"/>.
+    /// Runs <paramref name="command"/> (a System32 program, Ruling R8) through the UAC prompt (verb runas),
+    /// waits, and returns its exit code; null when the user declined the prompt or it could not start.
     /// </summary>
-    public static bool Run(string exePath, params string[] args)
+    public static int? Run(ElevatedCommand command)
     {
-        var psi = new ProcessStartInfo(exePath)
+        var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, command.FileName))
         {
             UseShellExecute = true,
             Verb = "runas",
-            Arguments = ElevatedArgs.ToCommandLine(args),
+            Arguments = command.Arguments,
+            WindowStyle = ProcessWindowStyle.Hidden,
         };
         try
         {
             using var p = Process.Start(psi);
-            if (p == null) return false;
+            if (p == null) return null;
             p.WaitForExit();
-            return p.ExitCode == 0;
+            return p.ExitCode;
         }
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
-            return false;
+            return null;
         }
     }
 }

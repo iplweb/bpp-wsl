@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using BPP.Core;
 using BPP.Windows;
 
 namespace BPP.Tray;
@@ -9,17 +8,11 @@ internal static class Program
     public const string Url = "https://localhost:8443/";
     private const string MutexName = @"Local\BPP.Tray";
 
-    /// <summary>Path of the running exe (the installed BPP.exe in production).</summary>
-    public static string ExePath => Environment.ProcessPath ?? AppPaths.TrayExe;
-
     [STAThread]
     private static int Main(string[] args)
     {
-        // Dispatch on arguments before the single-instance mutex: the tray itself launches
-        // "--elevated …" (UAC child) and Settings launches "--uninstall" while the tray runs.
-        if (args.Length > 0 && args[0] == ElevatedArgs.Flag)
-            return ElevatedTasks.Run(args);
-
+        // BPP.exe is never elevated (Ruling R8): UAC runs only System32 dism.exe / netsh.exe.
+        // "--uninstall" is dispatched before the single-instance mutex: Settings launches it while the tray runs.
         if (args.Length > 0 && args is not ["--uninstall"] and not ["--tray"])
             return 2;
 

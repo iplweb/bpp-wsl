@@ -21,10 +21,13 @@ internal sealed class TrayContext : ApplicationContext
     private const string ReadyBalloon = "BPP działa — https://localhost:8443/";
     private const int MaxLogLines = 1000;
     private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(2);
+    private static readonly TimeSpan StartSettleTimeout = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan TerminateAllowance = TimeSpan.FromSeconds(30);
 
     private readonly WslClient _wsl = new();
     private readonly Firewall _firewall = new();
     private readonly SynchronizationContext _ui;
+    private readonly int _uiThreadId = Environment.CurrentManagedThreadId;
     private readonly Icon _icon;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _share;
@@ -99,8 +102,9 @@ internal sealed class TrayContext : ApplicationContext
     {
         bool ruleExists;
         try { ruleExists = await Task.Run(_firewall.RuleExists); }
-        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        catch (Exception ex)
         {
+            Log("Sprawdzanie reguły zapory: " + ex.Message);
             ruleExists = false;
         }
         if (_closing) return;
@@ -131,23 +135,11 @@ internal sealed class TrayContext : ApplicationContext
 
             string? error = null;
             var ready = false;
-            try
+            await foreach (var ev in _wsl.RunCtlAsync("start --hosts " + HostList.ToCsv(hosts), _lifetime.Token))
             {
-                await foreach (var ev in _wsl.RunCtlAsync("start --hosts " + HostList.ToCsv(hosts), _lifetime.Token))
-                {
-                    if (ev.Message.Length > 0) Log($"[{ev.Step}] {ev.Message}");
-                    if (ev.Step == "ready") ready = true;
-                    else if (ev.Step == "error") error = ev.Message;
-                }
-            }
-            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-            {
-                return;
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception
-                                           or IOException)
-            {
-                error = ex.Message;
+                if (ev.Message.Length > 0) Log($"[{ev.Step}] {ev.Message}");
+                if (ev.Step == "ready") ready = true;
+                else if (ev.Step == "error") error = ev.Message;
             }
             if (_closing) return;
 
@@ -158,16 +150,29 @@ internal sealed class TrayContext : ApplicationContext
                 if (!wasRunning) _tray.ShowBalloonTip(5000, "BPP", ReadyBalloon, ToolTipIcon.Info);
                 return;
             }
-
-            Log("Uruchamianie nie powiodło się: " + (error ?? "bpp-ctl start zakończył się bez komunikatu „ready”."));
-            SetState(TipError, running: false);
-            _tray.ShowBalloonTip(10000, "BPP — błąd",
-                "Nie udało się uruchomić BPP. Szczegóły: menu ikonki → „Pokaż logi”.", ToolTipIcon.Error);
+            ReportStartFailure(error ?? "bpp-ctl start zakończył się bez komunikatu „ready”.");
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // closing: the start client was cancelled on purpose
+        }
+        catch (Exception ex)
+        {
+            // anything unexpected (host enumeration, relay, wsl.exe) still ends in the error state
+            if (!_closing) ReportStartFailure(ex.Message);
         }
         finally
         {
             _startGate.Release();
         }
+    }
+
+    private void ReportStartFailure(string error)
+    {
+        Log("Uruchamianie nie powiodło się: " + error);
+        SetState(TipError, running: false);
+        _tray.ShowBalloonTip(10000, "BPP — błąd",
+            "Nie udało się uruchomić BPP. Szczegóły: menu ikonki → „Pokaż logi”.", ToolTipIcon.Error);
     }
 
     private void OnNetworkAddressChanged(object? sender, EventArgs e)
@@ -224,16 +229,16 @@ internal sealed class TrayContext : ApplicationContext
     {
         if (_closing) return;
         _share.Enabled = false;
-        bool added;
+        int? code;
         try
         {
-            added = await Task.Run(() => Elevation.Run(Program.ExePath,
-                ElevatedArgs.Build(ElevatedArgs.Firewall, AppPaths.TrayExe)));
+            // UAC elevates System32 netsh.exe only (Ruling R8); the rule names the installed BPP.exe
+            code = await Task.Run(() => _firewall.AddElevated(AppPaths.TrayExe));
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception ex)
         {
             Log("Udostępnianie w sieci: " + ex.Message);
-            added = false;
+            code = -1;
         }
         finally
         {
@@ -241,9 +246,10 @@ internal sealed class TrayContext : ApplicationContext
         }
         if (_closing) return;
 
-        if (!added)
+        if (code != 0)
         {
-            MessageBox.Show("Nie udało się dodać reguły zapory (brak zgody administratora).\n\n" +
+            var why = code == null ? "brak zgody administratora" : $"netsh: kod {code}";
+            MessageBox.Show($"Nie udało się dodać reguły zapory ({why}).\n\n" +
                             "BPP pozostaje dostępne tylko na tym komputerze.",
                 "BPP", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
@@ -299,7 +305,7 @@ internal sealed class TrayContext : ApplicationContext
     {
         DetachUi();
         _tray.Text = TipStopping;
-        await ShutdownOnceAsync();
+        await ShutdownOnceAsync(StartSettleTimeout);
         Exit();
     }
 
@@ -308,7 +314,8 @@ internal sealed class TrayContext : ApplicationContext
         if (_closing || !Uninstaller.Confirm()) return;
         DetachUi();
         _tray.Visible = false;
-        if (_relay != null) await _relay.DisposeAsync(); // the uninstaller stops and unregisters the distro
+        await SettleStartAsync(StartSettleTimeout, releaseGate: true); // the uninstaller then stops the stack
+        if (_relay != null) await _relay.DisposeAsync();
 
         try
         {
@@ -327,18 +334,35 @@ internal sealed class TrayContext : ApplicationContext
     private void OnSessionEnding(object? sender, SessionEndingEventArgs e)
     {
         BeginClosing();
+        // On the UI thread an in-flight start cannot make progress while we block, so don't wait for it.
+        var startWait = Environment.CurrentManagedThreadId == _uiThreadId ? TimeSpan.Zero : StartSettleTimeout;
         // ShutdownCoreAsync never needs the UI thread, so blocking here (even on it) cannot deadlock.
-        try { ShutdownOnceAsync().Wait(StopTimeout); }
+        // The wait covers every bounded phase: start settle + stop + terminate.
+        try { ShutdownOnceAsync(startWait).Wait(startWait + StopTimeout + TerminateAllowance); }
         catch (AggregateException) { }
+        // Logoff may still be cancelled by another app: don't stay behind as a zombie holding the mutex.
+        _ui.Post(_ => Exit(), null);
     }
 
-    /// <summary>Thread-agnostic part of closing: no new wsl calls, cancel the running start client.</summary>
+    /// <summary>Thread-agnostic part of closing: no new starts, no more network/logoff events.</summary>
     private void BeginClosing()
     {
         _closing = true;
         NetworkChange.NetworkAddressChanged -= OnNetworkAddressChanged;
         SystemEvents.SessionEnding -= OnSessionEnding;
+    }
+
+    /// <summary>
+    /// Gives an in-flight `bpp-ctl start` up to <paramref name="wait"/> to finish (a `stop` racing a start
+    /// inside the VM can leave it half up), then cancels the client if it is still running.
+    /// Returns whether the start gate was acquired (and is still held unless <paramref name="releaseGate"/>).
+    /// </summary>
+    private async Task<bool> SettleStartAsync(TimeSpan wait, bool releaseGate)
+    {
+        var acquired = await _startGate.WaitAsync(wait).ConfigureAwait(false);
         _lifetime.Cancel();
+        if (acquired && releaseGate) _startGate.Release();
+        return acquired;
     }
 
     /// <summary>UI thread: also stops the debounce timer and closes windows that could call bpp-ctl.</summary>
@@ -350,17 +374,19 @@ internal sealed class TrayContext : ApplicationContext
         _menu.Enabled = false;
     }
 
-    private Task ShutdownOnceAsync()
+    private Task ShutdownOnceAsync(TimeSpan startWait)
     {
-        lock (_shutdownLock) return _shutdown ??= ShutdownCoreAsync();
+        lock (_shutdownLock) return _shutdown ??= ShutdownCoreAsync(startWait);
     }
 
     /// <summary>
     /// Cancelling the start client does not stop bpp-ctl inside the VM, so always `bpp-ctl stop`, then
     /// `wsl --terminate BPP`. Never touches the UI (see OnSessionEnding).
     /// </summary>
-    private async Task ShutdownCoreAsync()
+    private async Task ShutdownCoreAsync(TimeSpan startWait)
     {
+        await SettleStartAsync(startWait, releaseGate: true).ConfigureAwait(false);
+
         var relay = _relay;
         if (relay != null) await relay.DisposeAsync().ConfigureAwait(false);
 
@@ -399,6 +425,7 @@ internal sealed class TrayContext : ApplicationContext
         if (disposing)
         {
             BeginClosing();
+            _lifetime.Cancel();
             _wsl.LogLine -= Log;
             _networkDebounce.Dispose();
             _tray.Dispose();

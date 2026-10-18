@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using BPP.Core;
 using BPP.Windows;
 
 namespace BPP.Tray;
@@ -12,6 +11,7 @@ namespace BPP.Tray;
 internal static class Uninstaller
 {
     private const string Caption = "BPP — odinstalowanie";
+    private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(2);
 
     /// <summary>Entry point for <c>BPP.exe --uninstall</c> (e.g. from Settings → Aplikacje).</summary>
     public static int RunStandalone()
@@ -81,8 +81,11 @@ internal static class Uninstaller
         var wsl = new WslClient();
         if (await wsl.DistroExistsAsync())
         {
-            try { await wsl.RunCtlTextAsync("stop"); }
-            catch (Exception) { /* the distro is being removed anyway */ }
+            using (var timeout = new CancellationTokenSource(StopTimeout))
+            {
+                try { await wsl.RunCtlTextAsync("stop", timeout.Token); }
+                catch (Exception) { /* the distro is being removed anyway */ }
+            }
 
             try { await wsl.UnregisterAsync(); }
             catch (Exception ex) { problems.Add("Nie udało się usunąć dystrybucji WSL „BPP”: " + ex.Message); }
@@ -103,13 +106,19 @@ internal static class Uninstaller
         Step(problems, "wpisu w „Aplikacje”", registration.UnregisterUninstall);
         Step(problems, "wpisu RunOnce", registration.ClearRunOnce);
 
-        if (await Task.Run(() => new Firewall().RuleExists()))
+        try
         {
-            var removed = await Task.Run(() =>
-                Elevation.Run(Program.ExePath, ElevatedArgs.Build(ElevatedArgs.RemoveFirewall)));
-            if (!removed)
+            // RemoveElevated checks RuleExists unelevated first and prompts only when the rule is there
+            var code = await Task.Run(() => new Firewall().RemoveElevated());
+            if (code == null)
                 problems.Add($"Reguła zapory „{AppPaths.FirewallRuleName}” została (brak zgody administratora). " +
                              "Jest nieszkodliwa; administrator może ją usunąć w Zaporze Windows.");
+            else if (code != 0)
+                problems.Add($"Nie udało się usunąć reguły zapory „{AppPaths.FirewallRuleName}” (netsh: kod {code}).");
+        }
+        catch (Exception ex)
+        {
+            problems.Add($"Nie udało się usunąć reguły zapory „{AppPaths.FirewallRuleName}”: {ex.Message}");
         }
 
         return problems;
@@ -156,7 +165,8 @@ internal static class Uninstaller
     {
         var psi = new ProcessStartInfo(Path.Combine(Environment.SystemDirectory, "cmd.exe"))
         {
-            Arguments = "/d /c timeout /t 2 /nobreak >nul & rmdir /s /q \"%BPP_PROGRAM_DIR%\"",
+            // ping, not timeout: timeout exits at once when there is no console input to wait on
+            Arguments = "/d /c ping -n 3 127.0.0.1 >nul & rmdir /s /q \"%BPP_PROGRAM_DIR%\"",
             UseShellExecute = false,
             CreateNoWindow = true,
             WorkingDirectory = Environment.SystemDirectory, // never inside the directory being removed

@@ -5,48 +5,48 @@ namespace BPP.Core.Tests;
 public class ElevationContractTests
 {
     [Fact]
-    public void Build_firewall_prefixes_elevated_and_task()
-    {
-        Assert.Equal(new[] { "--elevated", "firewall", @"C:\a b\BPP.exe" },
-            ElevatedArgs.Build("firewall", @"C:\a b\BPP.exe"));
-    }
+    public void ToCommandLine_quotes_only_where_needed()
+        => Assert.Equal("a \"b c\" \"C:\\R&D\\a b\\BPP.exe\"",
+            ElevatedArgs.ToCommandLine(new[] { "a", "b c", @"C:\R&D\a b\BPP.exe" }));
 
-    [Theory]
-    [InlineData(@"C:\Users\Jan Kowalski\AppData\Local\Programs\BPP\BPP.exe")]
-    [InlineData(@"C:\R&D\a & b\BPP.exe")]
-    public void Roundtrip_firewall_path(string path)
+    [Fact]
+    public void Enable_wsl_is_one_dism_call_for_both_features()
     {
-        var parsed = ElevatedArgs.Parse(ElevatedArgs.Build("firewall", path));
-        Assert.NotNull(parsed);
-        Assert.Equal("firewall", parsed!.Task);
-        Assert.Equal(new[] { path }, parsed.Args);
+        var c = ElevatedCommands.EnableWsl();
+        Assert.Equal("dism.exe", c.FileName);
+        Assert.Equal("/online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux " +
+                     "/featurename:VirtualMachinePlatform /all /norestart", c.Arguments);
     }
 
     [Fact]
-    public void Roundtrip_through_command_line_string()
+    public void Add_firewall_rule_quotes_name_and_program_path_with_spaces()
     {
-        var path = @"C:\R&D\a b\BPP.exe";
-        var cmd = ElevatedArgs.ToCommandLine(ElevatedArgs.Build("firewall", path));
-        Assert.Equal("--elevated firewall \"C:\\R&D\\a b\\BPP.exe\"", cmd);
+        var c = ElevatedCommands.AddFirewallRule(@"C:\Users\Jan Kowalski\AppData\Local\Programs\BPP\BPP.exe");
+        Assert.Equal("netsh.exe", c.FileName);
+        Assert.Equal("advfirewall firewall add rule name=\"BPP (8443)\" dir=in action=allow " +
+                     "program=\"C:\\Users\\Jan Kowalski\\AppData\\Local\\Programs\\BPP\\BPP.exe\" " +
+                     "protocol=TCP localport=8443 profile=any enable=yes", c.Arguments);
+    }
+
+    [Fact]
+    public void Add_firewall_rule_path_without_spaces_is_left_bare()
+        => Assert.Contains(" program=C:\\BPP\\BPP.exe ", ElevatedCommands.AddFirewallRule(@"C:\BPP\BPP.exe").Arguments);
+
+    [Fact]
+    public void Delete_firewall_rule_by_name()
+    {
+        var c = ElevatedCommands.DeleteFirewallRule();
+        Assert.Equal("netsh.exe", c.FileName);
+        Assert.Equal("advfirewall firewall delete rule name=\"BPP (8443)\"", c.Arguments);
     }
 
     [Theory]
-    [InlineData("enable-wsl", 0)]
-    [InlineData("remove-firewall", 0)]
-    public void Parse_tasks_without_args(string task, int argc)
-    {
-        var parsed = ElevatedArgs.Parse(new[] { "--elevated", task });
-        Assert.NotNull(parsed);
-        Assert.Equal(task, parsed!.Task);
-        Assert.Equal(argc, parsed.Args.Count);
-    }
-
-    [Fact] public void Unknown_task_is_null() => Assert.Null(ElevatedArgs.Parse(new[] { "--elevated", "format-c" }));
-    [Fact] public void Missing_elevated_flag_is_null() => Assert.Null(ElevatedArgs.Parse(new[] { "firewall", @"C:\x.exe" }));
-    [Fact] public void Empty_is_null() => Assert.Null(ElevatedArgs.Parse(Array.Empty<string>()));
-    [Fact] public void Firewall_without_path_is_null() => Assert.Null(ElevatedArgs.Parse(new[] { "--elevated", "firewall" }));
-    [Fact] public void Firewall_with_relative_path_is_null() => Assert.Null(ElevatedArgs.Parse(new[] { "--elevated", "firewall", "BPP.exe" }));
-    [Fact] public void Extra_args_are_null() => Assert.Null(ElevatedArgs.Parse(new[] { "--elevated", "enable-wsl", "x" }));
+    [InlineData("BPP.exe")]
+    [InlineData(@"..\BPP.exe")]
+    [InlineData(@"C:\a\"" & calc & ""\BPP.exe")]
+    [InlineData("")]
+    public void Add_firewall_rule_rejects_relative_or_quoted_paths(string path)
+        => Assert.Throws<ArgumentException>(() => ElevatedCommands.AddFirewallRule(path));
 
     [Theory]
     [InlineData("simple", "simple")]

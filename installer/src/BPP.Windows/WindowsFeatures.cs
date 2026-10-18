@@ -1,4 +1,5 @@
 using System.Runtime.Versioning;
+using BPP.Core;
 using Microsoft.Win32;
 
 namespace BPP.Windows;
@@ -6,8 +7,7 @@ namespace BPP.Windows;
 [SupportedOSPlatform("windows")]
 public sealed class WindowsFeatures
 {
-    private const int RestartRequired = 3010;
-    private static string Dism => Path.Combine(Environment.SystemDirectory, "dism.exe");
+    public const int RestartRequired = 3010;
 
     /// <summary>
     /// Unelevated heuristic (DISM feature queries need admin): the LxssManager service exists once
@@ -16,21 +16,11 @@ public sealed class WindowsFeatures
     public bool IsWslFeatureEnabled()
         => ServiceKeyExists("LxssManager") && ServiceKeyExists("vmcompute");
 
-    /// <summary>Needs admin. Returns 0, 3010 (restart required) or the first failing DISM exit code.</summary>
-    public int EnableWslFeatures()
-    {
-        var restart = false;
-        foreach (var feature in new[] { "Microsoft-Windows-Subsystem-Linux", "VirtualMachinePlatform" })
-        {
-            var r = ProcessRunner.Run(Dism, new[]
-            {
-                "/online", "/enable-feature", $"/featurename:{feature}", "/all", "/norestart",
-            });
-            if (r.ExitCode == RestartRequired) restart = true;
-            else if (r.ExitCode != 0) return r.ExitCode;
-        }
-        return restart ? RestartRequired : 0;
-    }
+    /// <summary>
+    /// One elevated DISM call for both features. Returns 0, 3010 (<see cref="RestartRequired"/>), DISM's failing
+    /// exit code, or null when the user refused UAC.
+    /// </summary>
+    public int? EnableWslFeaturesElevated() => Elevation.Run(ElevatedCommands.EnableWsl());
 
     private static bool ServiceKeyExists(string name)
     {

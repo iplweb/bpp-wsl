@@ -1,8 +1,9 @@
 using System.Runtime.Versioning;
+using BPP.Core;
 
 namespace BPP.Windows;
 
-/// <summary>Inbound firewall rule for the app's own port. Add/Remove need admin (only called with --elevated).</summary>
+/// <summary>Inbound firewall rule for the app's own port. Changes go through an elevated System32 netsh.exe.</summary>
 [SupportedOSPlatform("windows")]
 public sealed class Firewall
 {
@@ -15,29 +16,14 @@ public sealed class Firewall
             "advfirewall", "firewall", "show", "rule", $"name={AppPaths.FirewallRuleName}",
         }).ExitCode == 0;
 
-    /// <summary>Idempotent: removes any existing rule with the same name first.</summary>
-    public void Add(string programPath)
-    {
-        Remove();
-        var r = ProcessRunner.Run(Netsh, new[]
-        {
-            "advfirewall", "firewall", "add", "rule",
-            $"name={AppPaths.FirewallRuleName}", "dir=in", "action=allow",
-            $"program={programPath}", "protocol=TCP", $"localport={AppPaths.Port}",
-            "profile=any", "enable=yes",
-        });
-        if (r.ExitCode != 0)
-            throw new InvalidOperationException($"netsh add rule: kod {r.ExitCode}: {r.StdOut.Trim()}");
-    }
+    /// <summary>
+    /// Adds the rule for <paramref name="programPath"/> with one UAC prompt, only when it is missing.
+    /// Returns 0 on success (or when it already exists), netsh's exit code on failure, null when UAC was refused.
+    /// </summary>
+    public int? AddElevated(string programPath)
+        => RuleExists() ? 0 : Elevation.Run(ElevatedCommands.AddFirewallRule(programPath));
 
-    public void Remove()
-    {
-        if (!RuleExists()) return;
-        var r = ProcessRunner.Run(Netsh, new[]
-        {
-            "advfirewall", "firewall", "delete", "rule", $"name={AppPaths.FirewallRuleName}",
-        });
-        if (r.ExitCode != 0)
-            throw new InvalidOperationException($"netsh delete rule: kod {r.ExitCode}: {r.StdOut.Trim()}");
-    }
+    /// <summary>Removes the rule with one UAC prompt, only when it exists. Same return contract as AddElevated.</summary>
+    public int? RemoveElevated()
+        => RuleExists() ? Elevation.Run(ElevatedCommands.DeleteFirewallRule()) : 0;
 }
