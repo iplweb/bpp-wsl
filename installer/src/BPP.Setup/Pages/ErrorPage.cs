@@ -32,7 +32,7 @@ internal sealed class ErrorPage : Page
             // fixed-height holder in an auto-size row: collapses while hidden, never grows with the log
             var holder = new Panel { Height = 110, Visible = false };
             holder.Controls.Add(box);
-            AddRow(DetailsToggle(holder));
+            AddRow(DetailsToggle(holder, growBy: holder.Height + 6));
             AddRow(holder);
         }
 

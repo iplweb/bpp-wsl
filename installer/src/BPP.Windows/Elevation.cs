@@ -21,7 +21,7 @@ public static class Elevation
             UseShellExecute = true,
             Verb = "runas",
             Arguments = command.Arguments,
-            WindowStyle = ProcessWindowStyle.Hidden,
+            WindowStyle = command.ShowWindow ? ProcessWindowStyle.Normal : ProcessWindowStyle.Hidden,
         };
         try
         {

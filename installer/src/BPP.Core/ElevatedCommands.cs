@@ -2,8 +2,11 @@ using System.Text.RegularExpressions;
 
 namespace BPP.Core;
 
-/// <summary>A System32 program (file name relative to System32) and its argument string, run with UAC.</summary>
-public sealed record ElevatedCommand(string FileName, string Arguments);
+/// <summary>
+/// A System32 program (file name relative to System32) and its argument string, run with UAC.
+/// <paramref name="ShowWindow"/>: show its console, so the user can watch a long run (DISM's progress bar).
+/// </summary>
+public sealed record ElevatedCommand(string FileName, string Arguments, bool ShowWindow = false);
 
 /// <summary>
 /// The only commands ever elevated (Ruling R8): Microsoft-signed System32 binaries, never BPP.exe, which lives
@@ -21,7 +24,7 @@ public static class ElevatedCommands
         "/online", "/enable-feature",
         "/featurename:Microsoft-Windows-Subsystem-Linux", "/featurename:VirtualMachinePlatform",
         "/all", "/norestart",
-    }));
+    }), ShowWindow: true);
 
     /// <summary>
     /// Inbound allow rule <paramref name="ruleName"/> (see <see cref="FirewallRuleName"/>) for

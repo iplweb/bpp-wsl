@@ -102,8 +102,10 @@ public static class InstallerPlan
         InstallerStep.CheckDistro => s.DistroExists ? InstallerStep.AskReinstall : InstallerStep.ImportDistro,
         InstallerStep.AskReinstall => s.ReinstallConfirmed ? InstallerStep.Unregister : InstallerStep.Declined,
         InstallerStep.Unregister => InstallerStep.ImportDistro,
-        // A failed import may mean WSL itself is not usable yet (the feature hint is only a heuristic).
+        // A failed import may mean WSL is too old ("wsl --update", e.g. right after DISM and the restart) or not
+        // usable at all (the feature hint is only a heuristic): update the package first, then one DISM call.
         InstallerStep.ImportDistro => s.ImportOk ? InstallerStep.RunInit
+            : !s.WslPackageInstallAttempted ? InstallerStep.InstallWslPackage
             : s.EnableWsl == EnableWslOutcome.NotRun ? InstallerStep.EnableWsl : InstallerStep.ImportFailed,
         // A failed or cancelled init may leave containers (restart: unless-stopped) holding 8443: stop them.
         InstallerStep.RunInit => s.Init switch

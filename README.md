@@ -31,13 +31,20 @@ Nie trzeba znać Linuksa, Dockera ani wiersza poleceń.
    bo program nie jest jeszcze podpisany.)
 3. Kliknij **Zainstaluj**. Instalator sprawdzi komputer i pokaże postęp.
 4. **Jeśli WSL nie jest włączony**, Windows poprosi o zgodę administratora
-   (okno UAC z wydawcą *Microsoft Windows*), a potem o **restart komputera**.
-   Po ponownym zalogowaniu instalacja wznowi się sama.
-5. Pobieranie obrazów trwa od kilku do kilkunastu minut, zależnie od łącza.
-6. Na koniec Windows może zapytać o zgodę na **regułę zapory** — zgódź się,
+   (okno UAC z wydawcą *Microsoft Windows*). Postęp włączania widać w czarnym
+   oknie konsoli. Potem instalator poprosi o **restart komputera**; po ponownym
+   zalogowaniu instalacja wznowi się sama.
+5. **Jeśli WSL wymaga aktualizacji** (Windows mówi wtedy „wsl --update”),
+   instalator zrobi ją sam — w oknie konsoli widać pobieranie, może też
+   pojawić się okno administratora. Nie zamykaj tego okna konsoli.
+6. Pobieranie obrazów trwa od kilku do kilkunastu minut, zależnie od łącza.
+7. Na koniec Windows może zapytać o zgodę na **regułę zapory** — zgódź się,
    jeśli BPP ma być widoczne z innych komputerów w sieci. Odmowa nie psuje
    instalacji: BPP będzie wtedy dostępne tylko na tym komputerze.
-7. Kliknij **Otwórz BPP**.
+8. Kliknij **Otwórz BPP**.
+
+Instalację można w każdej chwili przerwać przyciskiem **Anuluj** lub
+krzyżykiem i dokończyć później, uruchamiając instalator ponownie.
 
 ## Pierwsze uruchomienie
 

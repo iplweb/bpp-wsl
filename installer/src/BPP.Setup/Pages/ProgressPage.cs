@@ -14,12 +14,11 @@ internal sealed class ProgressPage : Page
         _bar = new ProgressBar { Height = 22, Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 30 };
         _log = LogBox();
         _cancel = Action("Anuluj", cancel);
-        _cancel.Enabled = false;
 
         AddRow(Title("Instalowanie BPP"));
         AddRow(_status);
         AddRow(_bar);
-        AddRow(DetailsToggle(_log));
+        AddRow(DetailsToggle(_log, growBy: 220));
         AddRow(_log, fill: true);
         AddButtons(_cancel);
     }
@@ -43,6 +42,4 @@ internal sealed class ProgressPage : Page
     {
         if (!IsDisposed) _log.AppendText(line + Environment.NewLine); // posted lines may arrive while closing
     }
-
-    public void SetCancelEnabled(bool enabled) => _cancel.Enabled = enabled;
 }

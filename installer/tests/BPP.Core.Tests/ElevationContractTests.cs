@@ -16,6 +16,14 @@ public class ElevationContractTests
         Assert.Equal("dism.exe", c.FileName);
         Assert.Equal("/online /enable-feature /featurename:Microsoft-Windows-Subsystem-Linux " +
                      "/featurename:VirtualMachinePlatform /all /norestart", c.Arguments);
+        Assert.True(c.ShowWindow); // the user watches DISM's progress in its console
+    }
+
+    [Fact]
+    public void Firewall_commands_run_without_a_window()
+    {
+        Assert.False(ElevatedCommands.AddFirewallRule(Rule, @"C:\Users\a\AppData\Local\BPP\BPP.exe").ShowWindow);
+        Assert.False(ElevatedCommands.DeleteFirewallRule(Rule).ShowWindow);
     }
 
     private const string Rule = "BPP (8443) 72c8a69c";

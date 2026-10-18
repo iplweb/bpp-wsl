@@ -200,15 +200,51 @@ public class InstallerPlanTests
         => Assert.Equal(S.RunInit, InstallerPlan.Next(After(S.ImportDistro) with { ImportOk = true }));
 
     [Fact]
-    public void Import_failure_offers_enable_wsl_once()
-        => Assert.Equal(S.EnableWsl, InstallerPlan.Next(After(S.ImportDistro) with { ImportOk = false, WslReady = true }));
+    public void Import_failure_first_updates_wsl()
+        => Assert.Equal(S.InstallWslPackage, InstallerPlan.Next(After(S.ImportDistro) with { ImportOk = false, WslReady = true }));
 
     [Fact]
-    public void Import_failure_after_enable_wsl_is_an_error()
+    public void Import_failure_after_wsl_update_offers_enable_wsl_once()
+        => Assert.Equal(S.EnableWsl, InstallerPlan.Next(After(S.ImportDistro) with
+        {
+            ImportOk = false, WslReady = true, WslPackageInstallAttempted = true,
+        }));
+
+    [Fact]
+    public void Import_failure_after_update_and_enable_wsl_is_an_error()
         => Assert.Equal(S.ImportFailed, InstallerPlan.Next(After(S.ImportDistro) with
         {
-            ImportOk = false, EnableWsl = EnableWslOutcome.Ok,
+            ImportOk = false, EnableWsl = EnableWslOutcome.Ok, WslPackageInstallAttempted = true,
         }));
+
+    [Fact]
+    public void Wsl_that_needs_update_after_restart_ends_installed_not_in_a_loop()
+    {
+        // after DISM + restart: "wsl --status" passes, but import fails until "wsl --update" ran
+        var s = new InstallerState();
+        var imports = 0;
+        var steps = new List<S>();
+        for (var i = 0; i < 40; i++)
+        {
+            var step = InstallerPlan.Next(s);
+            steps.Add(step);
+            if (InstallerPlan.IsFinal(step)) break;
+            s = step switch
+            {
+                S.Preflight => s with { Completed = step, PreflightOk = true },
+                S.CheckWsl => s with { Completed = step, WslReady = true, WslFeatureHint = true },
+                S.CheckDistro => s with { Completed = step, DistroExists = false },
+                S.InstallWslPackage => s with { Completed = step, WslPackageInstallAttempted = true },
+                S.ImportDistro => s with { Completed = step, ImportOk = ++imports > 1 && s.WslPackageInstallAttempted },
+                S.RunInit => s with { Completed = step, Init = InitOutcome.Ready },
+                S.AddFirewall => s with { Completed = step, FirewallOk = true },
+                _ => s with { Completed = step },
+            };
+        }
+        Assert.Equal(S.Done, steps[^1]);
+        Assert.DoesNotContain(S.EnableWsl, steps);
+        Assert.Equal(2, imports);
+    }
 
     // ---- 6. init ----
 

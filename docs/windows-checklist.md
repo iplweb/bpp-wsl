@@ -55,6 +55,21 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **11.** „Pokaż logi” pokazuje logi kontenerów.
   Wynik:
 
+- [ ] **12.** (0.1.1) Po DISM i restarcie, gdy Windows wymaga `wsl --update`:
+  instalator sam uruchamia aktualizację w widocznym oknie konsoli (postęp
+  pobierania widoczny), a potem importuje dystrybucję i kończy instalację.
+  Wynik:
+- [ ] **13.** (0.1.1) DISM uruchamia się w widocznym oknie konsoli z paskiem
+  postępu; `netsh` (zapora) bez okna.
+  Wynik:
+- [ ] **14.** (0.1.1) „Anuluj” i krzyżyk działają na każdym kroku: potwierdzenie →
+  okno się zamyka (podczas pobierania BPP najpierw zatrzymuje kontenery; drugie
+  zamknięcie nie czeka). Ponowne uruchomienie instalatora dokańcza instalację.
+  Wynik:
+- [ ] **15.** (0.1.1) „Szczegóły ▸” wydłuża okno w dół (nie ściska strony),
+  „Szczegóły ▾” przywraca wysokość; przy 150% DPI okno nie wychodzi poza ekran.
+  Wynik:
+
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
 
 - [ ] Dystrybucja z systemd i dockerem nie gaśnie po zamknięciu ostatniej

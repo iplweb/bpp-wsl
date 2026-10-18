@@ -144,9 +144,12 @@ internal sealed class InstallerFlow
                 return s with { EnableWsl = InstallerPlan.ClassifyEnableWsl(_dismExitCode) };
 
             case Step.InstallWslPackage:
-                _ui.SetStatus("Instalowanie WSL (może potrwać kilka minut)…", null);
-                try { await _wsl.InstallWslPackageAsync(); }
-                catch (Exception ex) { _ui.AppendLog(ex.Message); } // the following CheckWsl decides
+                _ui.SetStatus("Aktualizowanie WSL — postęp widać w oknie konsoli (może pojawić się też okno " +
+                              "administratora)…", null);
+                // the following CheckWsl / ImportDistro decide
+                var updated = await _wsl.UpdateWslAsync();
+                _ui.AppendLog("Aktualizacja WSL: " + (updated ? "zakończona" : "nieudana"));
+                _ui.SetStatus("Sprawdzanie WSL…", null);
                 return s with { WslPackageInstallAttempted = true };
 
             case Step.ScheduleResume:
@@ -386,7 +389,6 @@ internal sealed class InstallerFlow
     {
         using var cts = new CancellationTokenSource();
         _initCts = cts;
-        _ui.SetCancelEnabled(true);
         _ui.SetStatus("Konfiguracja i pobieranie BPP…", null);
         try
         {
@@ -422,7 +424,6 @@ internal sealed class InstallerFlow
         finally
         {
             _initCts = null;
-            _ui.SetCancelEnabled(false);
         }
     }
 

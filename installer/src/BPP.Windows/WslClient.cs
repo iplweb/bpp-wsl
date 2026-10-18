@@ -72,7 +72,49 @@ public sealed class WslClient
         }
     }
 
-    public Task InstallWslPackageAsync() => RunWslAsync("install", "--install", "--no-distribution");
+    /// <summary>
+    /// Installs or updates the WSL package — what Windows asks for with "wsl --update" right after the features were
+    /// enabled. Runs in a visible console window, so the user watches wsl.exe's own download progress (and answers
+    /// its UAC prompt for the MSI). Tries <c>--update</c> before <c>--install --no-distribution</c>, each first with
+    /// <c>--web-download</c> (GitHub instead of the Store; older wsl.exe rejects the flag). True when one of the
+    /// attempts exited with 0.
+    /// </summary>
+    public async Task<bool> UpdateWslAsync(CancellationToken ct = default)
+    {
+        string[][] attempts =
+        {
+            new[] { "--update", "--web-download" },
+            new[] { "--update" },
+            new[] { "--install", "--no-distribution", "--web-download" },
+            new[] { "--install", "--no-distribution" },
+        };
+        if (!File.Exists(WslExe))
+        {
+            LogLine?.Invoke("Brak " + WslExe + ".");
+            return false;
+        }
+        foreach (var args in attempts)
+        {
+            LogLine?.Invoke("wsl " + string.Join(' ', args));
+            var psi = new ProcessStartInfo(WslExe) { UseShellExecute = false, CreateNoWindow = false };
+            foreach (var a in args) psi.ArgumentList.Add(a);
+            int code;
+            try
+            {
+                using var p = Process.Start(psi) ?? throw new InvalidOperationException("Nie można uruchomić wsl.exe.");
+                await p.WaitForExitAsync(ct).ConfigureAwait(false);
+                code = p.ExitCode;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+            {
+                LogLine?.Invoke(ex.Message);
+                return false;
+            }
+            LogLine?.Invoke($"wsl {string.Join(' ', args)}: kod {code}");
+            if (code == 0) return true;
+        }
+        return false;
+    }
 
     /// <summary>
     /// Runs bpp-ctl as root in the BPP distro and streams its JSON events. <paramref name="args"/> is split on
@@ -144,7 +186,7 @@ public sealed class WslClient
         var psi = ProcessRunner.CreateStartInfo(WslExe, CtlArgv(args), utf8Env: true);
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
-        return Process.Start(psi) ?? throw new InvalidOperationException("Nie można uruchomić wsl.exe.");
+        return ProcessRunner.Start(psi);
     }
 
     private async Task PumpStderrAsync(Process p)

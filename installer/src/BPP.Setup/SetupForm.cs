@@ -22,6 +22,8 @@ internal sealed class SetupForm : Form
     private readonly StringBuilder _log = new();
     private InstallerFlow? _flow;
     private bool _closeWhenFinished;
+    private bool _forceClose;
+    private int _baseHeight;
     private bool _launchTray;
 
     public SetupForm(bool resume)
@@ -110,8 +112,6 @@ internal sealed class SetupForm : Form
 
     public void SetStatus(string text, double? fraction) => _progress.SetStatus(text, fraction);
 
-    public void SetCancelEnabled(bool enabled) => _progress.SetCancelEnabled(enabled);
-
     /// <summary>Thread-safe: WslClient raises LogLine from its stdout and stderr pumps concurrently.</summary>
     public void AppendLog(string line)
     {
@@ -149,6 +149,10 @@ internal sealed class SetupForm : Form
     /// <summary>Replaces the current page; the progress page is kept (its log survives a retry).</summary>
     private void ShowPage(Control page)
     {
+        // a page left with "Szczegóły" open made the window taller: every page starts at the base height
+        if (_baseHeight == 0) _baseHeight = Height;
+        else Height = _baseHeight;
+        (page as Pages.Page)?.CollapseDetails();
         var old = _content.Controls.Cast<Control>().ToList();
         _content.Controls.Clear();
         _content.Controls.Add(page);
@@ -156,50 +160,43 @@ internal sealed class SetupForm : Form
             if (!ReferenceEquals(c, _progress) && !ReferenceEquals(c, page)) c.Dispose();
     }
 
-    private void RequestCancel()
-    {
-        if (_flow is not { InitRunning: true }) return;
-        // the flow keeps running while the dialog is open: init may have ended meanwhile (CancelInit is then a no-op)
-        if (ConfirmCancel()) _flow.CancelInit();
-    }
+    /// <summary>"Anuluj" behaves like closing the window (see <see cref="OnFormClosing"/>).</summary>
+    private void RequestCancel() => Close();
 
     private bool ConfirmCancel()
-        => MessageBox.Show(this, "Przerwać instalację BPP?", Caption, MessageBoxButtons.YesNo,
-               MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
+        => MessageBox.Show(this, "Przerwać instalację BPP?\n\nMożesz ją dokończyć później, uruchamiając instalator ponownie.",
+               Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2) == DialogResult.Yes;
 
     /// <summary>
-    /// While the flow runs the window stays open: during init the user may cancel (the flow then stops the
-    /// distro and the window closes); other steps cannot be interrupted safely (UAC, wsl --import).
+    /// The user can always close the window. During init a confirmed close first cancels it (the flow then stops
+    /// the distro, so nothing keeps holding 8443) and closes when that ends; a second close does not wait. Any
+    /// other step is abandoned at once: a rerun of Setup picks up whatever it left (a partial distro is offered
+    /// for reinstall, a running DISM or wsl --update finishes in its own console window).
     /// </summary>
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
-        if (_flow is { IsRunning: true } && e.CloseReason != CloseReason.WindowsShutDown)
+        if (!_forceClose && _flow is { IsRunning: true } && e.CloseReason != CloseReason.WindowsShutDown)
         {
             e.Cancel = true;
-            if (_flow.InitRunning)
+            if (_closeWhenFinished) ForceClose(); // already stopping after a cancel: the user does not want to wait
+            else if (ConfirmCancel())
             {
-                // the flow keeps running while the dialog is open: re-check what it is doing now
-                if (ConfirmCancel())
+                if (_flow.InitRunning)
                 {
-                    if (_flow.InitRunning)
-                    {
-                        _closeWhenFinished = true;
-                        _flow.CancelInit();
-                    }
-                    else if (!_flow.IsRunning)
-                    {
-                        BeginInvoke(Close); // init and the flow ended meanwhile: nothing left to cancel
-                    }
-                    // else: init ended and a non-interruptible step runs now; the window stays open
+                    _closeWhenFinished = true;
+                    _flow.CancelInit();
+                    SetStatus("Przerywanie — zatrzymywanie BPP… (zamknij okno ponownie, aby nie czekać)", null);
                 }
-            }
-            else
-            {
-                MessageBox.Show(this, "Poczekaj na zakończenie bieżącego kroku instalacji.", Caption,
-                    MessageBoxButtons.OK, MessageBoxIcon.Information);
+                else ForceClose();
             }
         }
         base.OnFormClosing(e);
+    }
+
+    private void ForceClose()
+    {
+        _forceClose = true;
+        BeginInvoke(Close);
     }
 
     protected override void OnFormClosed(FormClosedEventArgs e)

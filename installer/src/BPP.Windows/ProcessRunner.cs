@@ -16,6 +16,8 @@ internal static class ProcessRunner
             CreateNoWindow = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
+            // closed right after start (see Start): a child that asks "press any key" must not wait forever
+            RedirectStandardInput = true,
         };
         foreach (var a in args) psi.ArgumentList.Add(a);
         if (utf8Env) psi.Environment["WSL_UTF8"] = "1";
@@ -25,8 +27,7 @@ internal static class ProcessRunner
     public static async Task<ProcessResult> RunAsync(
         string file, IEnumerable<string> args, bool utf8Env = false, CancellationToken ct = default)
     {
-        using var p = Process.Start(CreateStartInfo(file, args, utf8Env))
-            ?? throw new InvalidOperationException($"Nie można uruchomić {file}.");
+        using var p = Start(CreateStartInfo(file, args, utf8Env));
         using var reg = ct.Register(() => TryKill(p));
 
         var outTask = ReadAllAsync(p.StandardOutput.BaseStream);
@@ -35,6 +36,15 @@ internal static class ProcessRunner
         var stdout = await outTask.ConfigureAwait(false);
         var stderr = await errTask.ConfigureAwait(false);
         return new ProcessResult(p.ExitCode, WslText.Decode(stdout), WslText.Decode(stderr));
+    }
+
+    /// <summary>Starts a process made by <see cref="CreateStartInfo"/> and closes its stdin.</summary>
+    public static Process Start(ProcessStartInfo psi)
+    {
+        var p = Process.Start(psi) ?? throw new InvalidOperationException($"Nie można uruchomić {psi.FileName}.");
+        try { p.StandardInput.Close(); }
+        catch (IOException) { }
+        return p;
     }
 
     public static ProcessResult Run(string file, IEnumerable<string> args)

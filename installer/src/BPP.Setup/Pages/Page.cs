@@ -84,15 +84,40 @@ internal abstract class Page : UserControl
         Visible = false,
     };
 
-    /// <summary>A "Szczegóły ▸ / ▾" link that shows and hides <paramref name="target"/>.</summary>
-    protected static LinkLabel DetailsToggle(Control target)
+    private Control? _details;
+    private LinkLabel? _detailsLink;
+    private int _detailsGrowBy;
+
+    /// <summary>
+    /// A "Szczegóły ▸ / ▾" link that shows and hides <paramref name="target"/>; showing it makes the window
+    /// <paramref name="growBy"/> (96-DPI units) taller instead of squeezing the page, hiding shrinks it back.
+    /// </summary>
+    protected LinkLabel DetailsToggle(Control target, int growBy)
     {
         var link = new LinkLabel { Text = "Szczegóły ▸", AutoSize = true, Margin = new Padding(0, 6, 0, 4) };
-        link.LinkClicked += (_, _) =>
-        {
-            target.Visible = !target.Visible;
-            link.Text = target.Visible ? "Szczegóły ▾" : "Szczegóły ▸";
-        };
+        _details = target;
+        _detailsLink = link;
+        _detailsGrowBy = growBy;
+        link.LinkClicked += (_, _) => SetDetailsVisible(!target.Visible);
         return link;
+    }
+
+    /// <summary>Called before the page is (re)shown in a window of base height: details start collapsed.</summary>
+    public void CollapseDetails()
+    {
+        if (_details == null || _detailsLink == null) return;
+        _details.Visible = false;
+        _detailsLink.Text = "Szczegóły ▸";
+    }
+
+    private void SetDetailsVisible(bool visible)
+    {
+        if (_details == null || _detailsLink == null || _details.Visible == visible) return;
+        _details.Visible = visible;
+        _detailsLink.Text = visible ? "Szczegóły ▾" : "Szczegóły ▸";
+        if (FindForm() is not { } form) return;
+        form.Height += LogicalToDeviceUnits(_detailsGrowBy) * (visible ? 1 : -1);
+        var area = Screen.FromControl(form).WorkingArea;
+        if (form.Bottom > area.Bottom) form.Top = Math.Max(area.Top, area.Bottom - form.Height);
     }
 }
