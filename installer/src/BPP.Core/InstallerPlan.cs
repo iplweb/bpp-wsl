@@ -87,14 +87,14 @@ public static class InstallerPlan
         // A failed import may mean WSL itself is not usable yet (the feature hint is only a heuristic).
         InstallerStep.ImportDistro => s.ImportOk ? InstallerStep.RunInit
             : s.EnableWsl == EnableWslOutcome.NotRun ? InstallerStep.EnableWsl : InstallerStep.ImportFailed,
+        // A failed or cancelled init may leave containers (restart: unless-stopped) holding 8443: stop them.
         InstallerStep.RunInit => s.Init switch
         {
             InitOutcome.NotRun => InstallerStep.RunInit, // after Retry
             InitOutcome.Ready => InstallerStep.AddFirewall,
-            InitOutcome.Cancelled => InstallerStep.StopDistro,
-            _ => InstallerStep.InitFailed,
+            _ => InstallerStep.StopDistro,
         },
-        InstallerStep.StopDistro => InstallerStep.Cancelled,
+        InstallerStep.StopDistro => s.Init == InitOutcome.Cancelled ? InstallerStep.Cancelled : InstallerStep.InitFailed,
         InstallerStep.AddFirewall => InstallerStep.Register, // refusal only means localhost-only
         InstallerStep.Register => InstallerStep.Done,
         var final => throw new InvalidOperationException($"{final} jest stroną końcową, nie krokiem."),
@@ -121,7 +121,7 @@ public static class InstallerPlan
     {
         if (!CanRetry(Next(s)))
             throw new InvalidOperationException("Ponowić można tylko nieudany krok konfiguracji (bpp-ctl init).");
-        return s with { Init = InitOutcome.NotRun };
+        return s with { Init = InitOutcome.NotRun, Completed = InstallerStep.RunInit };
     }
 
     public static EnableWslOutcome ClassifyEnableWsl(int? exitCode) => exitCode switch

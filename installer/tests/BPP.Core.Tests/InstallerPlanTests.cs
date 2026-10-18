@@ -168,17 +168,18 @@ public class InstallerPlanTests
         => Assert.Equal(S.AddFirewall, InstallerPlan.Next(After(S.RunInit) with { Init = InitOutcome.Ready }));
 
     [Fact]
-    public void Init_error_is_a_retryable_error()
+    public void Init_error_stops_the_distro_then_is_a_retryable_error()
     {
         var s = After(S.RunInit) with { ImportOk = true, Init = InitOutcome.Failed };
-        Assert.Equal(S.InitFailed, InstallerPlan.Next(s));
+        Assert.Equal(S.StopDistro, InstallerPlan.Next(s));
+        Assert.Equal(S.InitFailed, InstallerPlan.Next(s with { Completed = S.StopDistro }));
         Assert.True(InstallerPlan.CanRetry(S.InitFailed));
     }
 
     [Fact]
     public void Retry_reruns_init_only()
     {
-        var s = After(S.RunInit) with { ImportOk = true, Init = InitOutcome.Failed };
+        var s = After(S.StopDistro) with { ImportOk = true, Init = InitOutcome.Failed };
         var retried = InstallerPlan.Retry(s);
         Assert.Equal(InitOutcome.NotRun, retried.Init);
         Assert.Equal(S.RunInit, InstallerPlan.Next(retried));
@@ -196,7 +197,10 @@ public class InstallerPlanTests
 
     [Fact]
     public void Retry_outside_init_failure_is_rejected()
-        => Assert.Throws<InvalidOperationException>(() => InstallerPlan.Retry(After(S.ImportDistro) with { ImportOk = false }));
+    {
+        Assert.Throws<InvalidOperationException>(() => InstallerPlan.Retry(After(S.ImportDistro) with { ImportOk = false }));
+        Assert.Throws<InvalidOperationException>(() => InstallerPlan.Retry(After(S.StopDistro) with { Init = InitOutcome.Cancelled }));
+    }
 
     [Fact]
     public void Cancel_during_init_stops_the_distro_then_ends()

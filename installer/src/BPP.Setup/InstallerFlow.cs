@@ -74,6 +74,12 @@ internal sealed class InstallerFlow
         catch (Exception ex)
         {
             _ui.AppendLog("Błąd: " + ex);
+            if (_state.Init == InitOutcome.Ready)
+            {
+                // the stack is up but nothing (tray, shortcut) can stop it later: don't leave it holding 8443
+                try { await StopDistroAsync(); }
+                catch (Exception stopEx) { _ui.AppendLog("Zatrzymywanie BPP: " + stopEx.Message); }
+            }
             _ui.ShowError("Instalacja nie powiodła się", new[] { ex.Message }, canRetry: false);
         }
         finally
@@ -140,7 +146,7 @@ internal sealed class InstallerFlow
                 return s with { Init = await RunInitAsync() };
 
             case Step.StopDistro:
-                _ui.SetStatus("Przerywanie — zatrzymywanie BPP…", null);
+                _ui.SetStatus(s.Init == InitOutcome.Cancelled ? "Przerywanie — zatrzymywanie BPP…" : "Zatrzymywanie BPP…", null);
                 await StopDistroAsync();
                 return s;
 
