@@ -15,6 +15,7 @@ internal sealed class InstallerFlow
     public const string TrayEntry = "BPP.exe";
 
     private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(2);
+    private const string RootfsTempPrefix = "BPP-rootfs-";
 
     private readonly SetupForm _ui;
     private readonly string _setupExe;
@@ -51,6 +52,7 @@ internal sealed class InstallerFlow
         // A stale "--resume" entry (e.g. the user ran Setup by hand after the restart) must not fire again later.
         try { _registration.ClearRunOnce(); }
         catch (Exception ex) { _ui.AppendLog("RunOnce: " + ex.Message); }
+        SweepStaleRootfs();
         return LoopAsync();
     }
 
@@ -347,7 +349,7 @@ internal sealed class InstallerFlow
     /// </summary>
     private async Task<bool> ImportAsync()
     {
-        var tar = Path.Combine(Path.GetTempPath(), $"BPP-rootfs-{Guid.NewGuid():N}.tar.gz");
+        var tar = Path.Combine(Path.GetTempPath(), RootfsTempPrefix + $"{Guid.NewGuid():N}.tar.gz");
         try
         {
             _ui.SetStatus("Rozpakowywanie dystrybucji BPP…", null);
@@ -449,6 +451,26 @@ internal sealed class InstallerFlow
 
     private static string Version
         => typeof(InstallerFlow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
+
+    /// <summary>
+    /// Best effort: a killed or crashed earlier run may have left its ~1 GB rootfs in %TEMP%. Only one Setup runs at
+    /// a time (mutex), so every match is stale; a file still in use simply stays.
+    /// </summary>
+    private void SweepStaleRootfs()
+    {
+        try
+        {
+            foreach (var f in Directory.EnumerateFiles(Path.GetTempPath(), RootfsTempPrefix + "*.tar.gz"))
+            {
+                _ui.AppendLog("Usuwanie pozostałości poprzedniej instalacji: " + f);
+                TryDelete(f);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _ui.AppendLog("Sprzątanie %TEMP%: " + ex.Message);
+        }
+    }
 
     private static void TryDelete(string path)
     {
