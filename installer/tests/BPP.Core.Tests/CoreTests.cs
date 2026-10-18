@@ -109,3 +109,22 @@ public class WslTextCleanLineTests
     [Fact] public void Strips_nul_and_cr() => Assert.Equal("abc", WslText.CleanLine("a\0b\0c\r"));
     [Fact] public void Leaves_plain_text() => Assert.Equal("ok żółć", WslText.CleanLine("ok żółć"));
 }
+
+public class RelayAddressesTests
+{
+    [Fact]
+    public void Skips_localhost_and_returns_ip_addresses()
+    {
+        var r = RelayAddresses.From(new[] { "localhost", "192.168.1.50", "10.0.0.7" });
+        Assert.Equal(new[] { IPAddress.Parse("192.168.1.50"), IPAddress.Parse("10.0.0.7") }, r);
+    }
+
+    [Fact] public void Only_localhost_gives_empty() => Assert.Empty(RelayAddresses.From(new[] { "localhost" }));
+
+    [Fact]
+    public void Ignores_non_ipv4_entries()
+    {
+        var r = RelayAddresses.From(new[] { "LOCALHOST", "::1", "example.com", "172.16.0.1" });
+        Assert.Equal(new[] { IPAddress.Parse("172.16.0.1") }, r);
+    }
+}
