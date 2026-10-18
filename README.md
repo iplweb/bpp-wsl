@@ -1,26 +1,95 @@
-# BPP w WSL — instalator dla Windows
+# BPP na Windowsie — instalator testowy
 
-Jednoplikowy instalator `BPP-Setup.exe`, który stawia na zwykłym komputerze
-z Windowsem działającą (testową) instancję BPP — Bibliografii Publikacji
-Pracowników. Wszystko działa per-użytkownik, w osobnej dystrybucji WSL
-o nazwie `BPP` (Debian + Docker + 7 kontenerów), dostępnej pod
-`https://localhost:8443/`. Po instalacji w zasobniku systemowym działa
-ikonka `BPP.exe` (otwórz, logi, udostępnienie w sieci lokalnej, zatrzymaj,
-odinstaluj).
+**BPP (Bibliografia Publikacji Pracowników) na zwykłym komputerze z Windowsem,
+jednym kliknięciem.** Instalator sam włącza WSL, stawia w nim Dockera, pobiera
+obrazy BPP i uruchamia czystą instancję z kreatorem pierwszej konfiguracji.
+Nie trzeba znać Linuksa, Dockera ani wiersza poleceń.
 
-Szczegóły projektu: `docs/superpowers/specs/2026-10-18-bpp-wsl-design.md`.
-Lista kontrolna do ręcznego testu na Windowsie: `docs/windows-checklist.md`.
+> ⚠️ **Wersja testowa i wczesna.** Służy do wypróbowania BPP, nie do pracy
+> produkcyjnej. Instalator nie jest jeszcze podpisany cyfrowo i nie przeszedł
+> pełnych testów na Windowsie — zgłaszaj problemy w
+> [Issues](https://github.com/iplweb/bpp-wsl/issues).
 
-## Wymagania (komputer użytkownika)
+## Pobieranie
 
-- Windows 10 22H2 lub Windows 11, **x64** (ARM nieobsługiwany),
-- 8 GB RAM, 25 GB wolnego miejsca na dysku,
-- dostęp do internetu (instalator pobiera ok. 2 GB obrazów kontenerów),
-- **brak obsługi proxy HTTP** — sieć musi wpuszczać Dockera w WSL bezpośrednio,
-- wolny port TCP 8443,
-- uprawnienia administratora tylko jeśli trzeba włączyć funkcje Windows dla
-  WSL albo dodać regułę zapory (UAC pojawia się wyłącznie dla systemowych
-  `dism.exe` i `netsh.exe`).
+**[⬇ Pobierz najnowszy `BPP-Setup.exe` z zakładki Releases](https://github.com/iplweb/bpp-wsl/releases/latest)**
+
+## Wymagania
+
+- Windows 10 22H2 lub Windows 11, **64-bitowy (x64)** — komputery ARM nie są obsługiwane,
+- **8 GB RAM** i **25 GB wolnego miejsca** na dysku,
+- internet (instalator pobiera ok. 2 GB) — bez serwera proxy,
+- wolny port **8443**,
+- hasło administratora **tylko wtedy**, gdy trzeba włączyć WSL albo otworzyć
+  BPP dla innych komputerów w sieci. Resztę robi zwykły użytkownik.
+
+## Instalacja krok po kroku
+
+1. Pobierz `BPP-Setup-<wersja>.exe` i kliknij go dwukrotnie.
+2. Jeśli Windows pokaże niebieskie okno **„System Windows ochronił ten
+   komputer”**, kliknij **Więcej informacji → Uruchom mimo to**. (Pojawia się,
+   bo program nie jest jeszcze podpisany.)
+3. Kliknij **Zainstaluj**. Instalator sprawdzi komputer i pokaże postęp.
+4. **Jeśli WSL nie jest włączony**, Windows poprosi o zgodę administratora
+   (okno UAC z wydawcą *Microsoft Windows*), a potem o **restart komputera**.
+   Po ponownym zalogowaniu instalacja wznowi się sama.
+5. Pobieranie obrazów trwa od kilku do kilkunastu minut, zależnie od łącza.
+6. Na koniec Windows może zapytać o zgodę na **regułę zapory** — zgódź się,
+   jeśli BPP ma być widoczne z innych komputerów w sieci. Odmowa nie psuje
+   instalacji: BPP będzie wtedy dostępne tylko na tym komputerze.
+7. Kliknij **Otwórz BPP**.
+
+## Pierwsze uruchomienie
+
+Przeglądarka otworzy `https://localhost:8443/`. Zobaczysz ostrzeżenie
+o certyfikacie — to normalne, bo certyfikat jest wygenerowany lokalnie.
+Kliknij **Zaawansowane → Przejdź do localhost**.
+
+Pojawi się **kreator konfiguracji BPP**: załóż konto administratora i wpisz
+dane uczelni. Zrób to od razu — dopóki konta nie ma, kreator może otworzyć
+każdy w sieci lokalnej.
+
+Z innych komputerów w sieci BPP jest dostępne pod `https://<adres-IP-tego-komputera>:8443/`.
+
+## Codzienne używanie
+
+BPP **nie startuje samo** z Windowsem. Uruchamiasz je skrótem **BPP** w Menu
+Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
+
+| Pozycja | Co robi |
+|---|---|
+| **Otwórz BPP** | otwiera BPP w przeglądarce |
+| **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów |
+| **Udostępnij w sieci lokalnej…** | dodaje regułę zapory, gdy wcześniej jej odmówiono |
+| **Zatrzymaj** | wyłącza BPP i zwalnia pamięć |
+| **Odinstaluj** | usuwa BPP razem z danymi |
+
+## Odinstalowanie
+
+Menu ikonki → **Odinstaluj** albo **Ustawienia → Aplikacje → BPP**.
+**Wszystkie dane testowe zostaną usunięte bezpowrotnie.** Instalacja nowszej
+wersji również zaczyna od czystej bazy.
+
+## Gdy coś nie działa
+
+- **„Port 8443 jest zajęty”** — instalator podpowie, co go używa; jeśli to
+  stare BPP, kliknij **Zatrzymaj BPP**.
+- **Za mało pamięci/miejsca** — instalator odmówi i powie, czego brakuje.
+- **Inne błędy** — menu ikonki → **Pokaż logi** → skopiuj i dołącz do
+  zgłoszenia w [Issues](https://github.com/iplweb/bpp-wsl/issues).
+
+## Jak to działa w środku
+
+W WSL powstaje osobna dystrybucja `BPP` (Debian + Docker CE) tylko dla Twojego
+konta. Działa w niej 7 kontenerów BPP (aplikacja, baza PostgreSQL, Redis,
+zadania w tle, nginx z lokalnym certyfikatem). Program `BPP.exe` w zasobniku
+uruchamia i zatrzymuje dystrybucję oraz przekazuje ruch z sieci lokalnej na
+port 8443. Szczegóły:
+[specyfikacja](docs/superpowers/specs/2026-10-18-bpp-wsl-design.md).
+
+---
+
+# Dla programistów
 
 ## Jak zbudować
 
@@ -96,15 +165,13 @@ Przy `BPP_SIGN=1` bez wymaganych zmiennych build kończy się błędem.
 Podpisać można też gotowy plik ręcznie: `build/sign.sh dist/BPP-Setup-0.1.0.exe`.
 (Podpisywanie nie zostało jeszcze przetestowane — brak certyfikatu.)
 
-## Tekst na stronę pobierania (SmartScreen)
+## Publikacja wydania
 
-Dopóki plik nie jest podpisany, Windows SmartScreen pokaże ostrzeżenie
-„System Windows ochronił ten komputer”. Do umieszczenia przy przycisku
-pobierania:
-
-> Po pobraniu Windows może wyświetlić niebieskie okno „System Windows
-> ochronił ten komputer”, bo program nie jest jeszcze podpisany cyfrowo.
-> Kliknij **Więcej informacji → Uruchom mimo to**.
+```bash
+build/build.sh <BPP_IMAGE_TAG> <wersja>
+git tag v<wersja> && git push origin v<wersja>
+gh release create v<wersja> dist/BPP-Setup-<wersja>.exe --prerelease
+```
 
 ## Uwagi bezpieczeństwa
 
@@ -131,7 +198,9 @@ pobierania:
 
 ## CI
 
-`.github/workflows/build.yml` (runner `windows-latest`): `dotnet test`,
-`dotnet build -c Release`, publish `BPP.exe` i smoke — `BPP.exe --bogus`
-musi zakończyć się kodem 2 bez UI. **Nieprzetestowane**, dopóki repozytorium
-nie ma zdalnego GitHuba.
+`.github/workflows/build.yml` (runner `windows-latest`, przy każdym pushu
+i PR): `dotnet test`, `dotnet build -c Release`, publish `BPP.exe` i smoke —
+`BPP.exe --bogus` musi zakończyć się kodem 2 bez UI. Dystrybucja Linuksa nie
+jest budowana w CI — buduje ją `build/build.sh` lokalnie.
+
+Lista kontrolna ręcznego testu na Windowsie: [docs/windows-checklist.md](docs/windows-checklist.md).
