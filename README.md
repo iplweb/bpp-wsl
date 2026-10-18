@@ -1,14 +1,40 @@
-# BPP na Windowsie — instalator testowy
+# BPP na Windowsie — instalator do testów
 
-**BPP (Bibliografia Publikacji Pracowników) na zwykłym komputerze z Windowsem,
-jednym kliknięciem.** Instalator sam włącza WSL, stawia w nim Dockera, pobiera
-obrazy BPP i uruchamia czystą instancję z kreatorem pierwszej konfiguracji.
-Nie trzeba znać Linuksa, Dockera ani wiersza poleceń.
+<p>
+  <a href="https://bpp.iplweb.pl/"><img src="installer/assets/logo.png" alt="Bibliografia Publikacji Pracowników" height="72"></a>
+  &nbsp;&nbsp;&nbsp;
+  <a href="https://bpp.iplweb.pl/"><img src="installer/assets/logo-iplweb.png" alt="IPLweb" height="48"></a>
+</p>
 
-> ⚠️ **Wersja testowa i wczesna.** Służy do wypróbowania BPP, nie do pracy
-> produkcyjnej. Instalator nie jest jeszcze podpisany cyfrowo i nie przeszedł
-> pełnych testów na Windowsie — zgłaszaj problemy w
-> [Issues](https://github.com/iplweb/bpp-wsl/issues).
+**Wypróbuj BPP (Bibliografię Publikacji Pracowników) na zwykłym komputerze
+z Windowsem — jednym kliknięciem.** Instalator sam włącza WSL, stawia w nim
+Dockera, pobiera obrazy BPP i uruchamia czystą instancję z kreatorem pierwszej
+konfiguracji. Nie trzeba znać Linuksa, Dockera ani wiersza poleceń.
+
+Więcej o BPP: **[bpp.iplweb.pl](https://bpp.iplweb.pl/)**
+
+## ⚠️ To jest instalacja do TESTÓW, nie do pracy produkcyjnej
+
+**Do czego służy:**
+- obejrzenie i przetestowanie BPP przed decyzją o wdrożeniu,
+- szkolenie, pokaz, sprawdzenie importu czy raportów na próbnych danych,
+- testy na własnym komputerze, bez serwera i bez działu IT.
+
+**Do czego się NIE nadaje:**
+- **prawdziwa bibliografia uczelni** — dane nie mają kopii zapasowych,
+  a **odinstalowanie lub instalacja nowszej wersji kasuje je bezpowrotnie**,
+- serwer dla wielu użytkowników — BPP działa tylko wtedy, gdy ten komputer
+  jest włączony, a BPP uruchomione z Menu Start,
+- dostęp z internetu — certyfikat jest samopodpisany, a konfiguracja
+  nastawiona na wygodę testów, nie na bezpieczeństwo.
+
+Do pracy produkcyjnej służy instalacja na serwerze:
+[bpp-deploy](https://github.com/iplweb/bpp-deploy) — szczegóły na
+[bpp.iplweb.pl](https://bpp.iplweb.pl/).
+
+Sam instalator jest też wczesną wersją: nie jest podpisany cyfrowo i nie
+przeszedł jeszcze pełnych testów na Windowsie — problemy zgłaszaj w
+[Issues](https://github.com/iplweb/bpp-wsl/issues).
 
 ## Pobieranie
 

@@ -6,16 +6,18 @@ using BPP.Windows;
 
 namespace BPP.Setup;
 
-/// <summary>The wizard window: logo on top, one page below. Decisions live in InstallerPlan, steps in InstallerFlow.</summary>
+/// <summary>The wizard window: BPP and IPLweb logos on top, one page below. Decisions live in InstallerPlan, steps in InstallerFlow.</summary>
 internal sealed class SetupForm : Form
 {
     public const string BppUrl = "https://localhost:8443/";
+    private const string ProjectUrl = "https://bpp.iplweb.pl/";
     private const string Caption = "Instalator BPP";
     private const string NoPayload = "Brak danych instalacyjnych w pliku — użyj pełnego instalatora.";
 
     private readonly bool _resume;
     private readonly Icon _icon;
     private readonly Image _logo;
+    private readonly Image _iplwebLogo;
     private readonly Panel _content;
     private readonly ProgressPage _progress;
     private readonly object _logLock = new();
@@ -33,35 +35,82 @@ internal sealed class SetupForm : Form
         using (var s = asm.GetManifestResourceStream("BPP.Setup.bpp.ico")
                        ?? throw new InvalidOperationException("Brak zasobu bpp.ico."))
             _icon = new Icon(s);
-        using (var s = asm.GetManifestResourceStream("BPP.Setup.logo.png")
-                       ?? throw new InvalidOperationException("Brak zasobu logo.png."))
-        using (var img = Image.FromStream(s))
-            _logo = new Bitmap(img); // Image.FromStream needs its stream alive; the copy does not
+        _logo = LoadImage(asm, "logo.png");
+        _iplwebLogo = LoadImage(asm, "logo-iplweb.png");
 
         Text = Caption;
         Icon = _icon;
         // Layout is in 96-DPI units; WinForms scales the window and pages at 125–150 % DPI.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 420);
+        ClientSize = new Size(560, 450);
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
 
         _content = new Panel { Dock = DockStyle.Fill };
-        var logo = new PictureBox
-        {
-            Image = _logo,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            Dock = DockStyle.Top,
-            Height = 96,
-            Padding = new Padding(0, 12, 0, 4),
-        };
         Controls.Add(_content);
-        Controls.Add(logo);
+        Controls.Add(BuildHeader());
 
         _progress = new ProgressPage(RequestCancel);
         Shown += OnShown;
+    }
+
+    private static Image LoadImage(System.Reflection.Assembly asm, string name)
+    {
+        using var s = asm.GetManifestResourceStream("BPP.Setup." + name)
+                      ?? throw new InvalidOperationException($"Brak zasobu {name}.");
+        using var img = Image.FromStream(s);
+        return new Bitmap(img); // Image.FromStream needs its stream alive; the copy does not
+    }
+
+    /// <summary>BPP logo on the left, IPLweb on the right, the project page link below; all open bpp.iplweb.pl.</summary>
+    private Control BuildHeader()
+    {
+        var header = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            Height = 124,
+            ColumnCount = 2,
+            RowCount = 2,
+            Padding = new Padding(20, 12, 20, 0),
+        };
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55));
+        header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 45));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 84));
+        header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        header.Controls.Add(LogoLink(_logo, "Bibliografia Publikacji Pracowników", new Padding(0)), 0, 0);
+        // the IPLweb mark is wider and lower: padded so it reads as the smaller, secondary logo
+        header.Controls.Add(LogoLink(_iplwebLogo, "IPLweb", new Padding(18, 18, 0, 18)), 1, 0);
+
+        var link = new LinkLabel
+        {
+            Text = ProjectUrl,
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter,
+        };
+        link.LinkClicked += (_, _) => OpenUrl(ProjectUrl);
+        header.Controls.Add(link, 0, 1);
+        header.SetColumnSpan(link, 2);
+        return header;
+    }
+
+    private PictureBox LogoLink(Image image, string name, Padding padding)
+    {
+        var box = new PictureBox
+        {
+            Image = image,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0),
+            Padding = padding,
+            Cursor = Cursors.Hand,
+            AccessibleName = name,
+            AccessibleRole = AccessibleRole.Link,
+        };
+        box.Click += (_, _) => OpenUrl(ProjectUrl);
+        return box;
     }
 
     private void OnShown(object? sender, EventArgs e)
@@ -207,15 +256,17 @@ internal sealed class SetupForm : Form
         base.OnFormClosed(e);
     }
 
-    private void OpenBpp()
+    private void OpenBpp() => OpenUrl(BppUrl);
+
+    private void OpenUrl(string url)
     {
         try
         {
-            using var _ = Process.Start(new ProcessStartInfo(BppUrl) { UseShellExecute = true });
+            using var _ = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
         }
         catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
         {
-            MessageBox.Show(this, $"Nie udało się otworzyć przeglądarki. Otwórz ręcznie adres {BppUrl}", Caption,
+            MessageBox.Show(this, $"Nie udało się otworzyć przeglądarki. Otwórz ręcznie adres {url}", Caption,
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
@@ -262,6 +313,7 @@ internal sealed class SetupForm : Form
         {
             _progress.Dispose(); // may be detached from _content
             _logo.Dispose();
+            _iplwebLogo.Dispose();
             _icon.Dispose();
         }
         base.Dispose(disposing);

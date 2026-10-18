@@ -73,6 +73,11 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   … (3 z 7)”, od 0 do 100% dla każdego obrazu; przy innych krokach animacja),
   dolny „Cała instalacja: NN%” rośnie przez całą instalację i nigdy się nie cofa.
   Wynik:
+- [ ] **17.** (0.1.3) Nagłówek: logo BPP po lewej, IPLweb po prawej, pod nimi link
+  `https://bpp.iplweb.pl/`; kliknięcie każdego z trzech otwiera tę stronę w
+  przeglądarce. Przy 125–150% DPI loga nie są ucięte ani rozciągnięte.
+  Ekran powitalny mówi, że to instalacja do testów.
+  Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
 
