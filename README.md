@@ -273,3 +273,10 @@ i PR): `dotnet test`, `dotnet build -c Release`, publish `BPP.exe` i smoke —
 jest budowana w tym workflow — robi to `release.yml` (wyżej).
 
 Lista kontrolna ręcznego testu na Windowsie: [docs/windows-checklist.md](docs/windows-checklist.md).
+
+## Licencja
+
+Instalator (to repozytorium): [MIT](LICENSE) — polskie tłumaczenie w
+[LICENSE-PL.txt](LICENSE-PL.txt). Oprogramowanie BPP ma własną licencję MIT,
+którą instalator pokazuje do akceptacji przed instalacją
+([installer/assets/LICENSE-BPP.txt](installer/assets/LICENSE-BPP.txt)).
