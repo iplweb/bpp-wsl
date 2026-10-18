@@ -12,7 +12,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 
 - [ ] **1.** Bez WSL: dwuklik → UAC (systemowe `dism.exe`) → instalacja WSL →
   restart → instalacja wznawia się sama (RunOnce) → kończy się przyciskiem
-  „Otwórz BPP”.
+  „Otwórz BPP”. Uwaga: po wznowieniu pojawia się **drugie okno UAC**
+  (systemowe `netsh.exe`, reguła zapory) — to oczekiwane, nie błąd; odmowa
+  oznacza tylko BPP dostępne lokalnie.
   Wynik:
 - [ ] **2.** Z WSL: od dwukliku do „Gotowe” bez interakcji poza „Zainstaluj”
   i jednym UAC (zapora).
@@ -113,4 +115,31 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   Wynik:
 - [ ] RunOnce po restarcie: po wymaganym restarcie instalacja wznawia się
   sama (`--resume`, bez strony powitalnej) i dochodzi do „Gotowe”.
+  Wynik:
+- [ ] Dwa konta Windows na jednym komputerze (A i B, kolejno — port 8443
+  i przekaźnik są wspólne dla komputera, więc BPP konta A zatrzymaj przed
+  uruchomieniem BPP konta B): każde konto ma własną regułę zapory
+  `BPP (8443) <8 znaków hex>` (`netsh advfirewall firewall show rule
+  name=all | findstr "BPP (8443)"` pokazuje dwie), BPP każdego konta jest
+  dostępne z LAN, a odinstalowanie BPP z konta A nie usuwa reguły, dystrybucji
+  ani skrótu konta B (i B nadal działa w LAN).
+  Wynik:
+- [ ] Instalator uruchomiony, gdy dystrybucja BPP działa bez ikonki (np.
+  zabity `BPP.exe` w Menedżerze zadań przy działającym stosie): strona błędu
+  wymagań wskazuje port 8443 zajęty przez `wslrelay` i oferuje „Zatrzymaj
+  BPP” → po kliknięciu instalator zatrzymuje BPP, ponownie sprawdza wymagania
+  i przechodzi dalej (pyta o ponowną instalację). Gdy port zajmuje inna
+  dystrybucja WSL, po jednej próbie komunikat wskazuje inną dystrybucję i
+  przycisk znika.
+  Wynik:
+- [ ] Pierwszy zimny start dystrybucji (`wsl --shutdown`, potem skrót „BPP”):
+  ikonka dochodzi do „BPP — działa” bez błędu typu „Cannot connect to the
+  Docker daemon” (bpp-ctl czeka do 60 s na `docker info`; w logach może być
+  „Oczekiwanie na uruchomienie Dockera”).
+  Wynik:
+- [ ] Nieudane odinstalowanie dystrybucji (np. `wsl --unregister` zwraca
+  błąd): komunikat „Nie udało się odinstalować BPP … Spróbuj ponownie
+  odinstalować”, a program, skrót, wpis w „Aplikacje” i katalog
+  `%LOCALAPPDATA%\Programs\BPP` zostają; ponowne „Odinstaluj” kończy
+  dzieła.
   Wynik:
