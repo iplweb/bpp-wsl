@@ -196,4 +196,39 @@ public class TcpRelayTests
         }
         finally { echo.Stop(); }
     }
+
+    [Fact]
+    public async Task Rapid_add_remove_cycles_never_throw()
+    {
+        await using var relay = new RelaySet(0, new IPEndPoint(IPAddress.Loopback, 1), true);
+        for (var i = 0; i < 200; i++)
+        {
+            await relay.UpdateAsync(new[] { IPAddress.Loopback });
+            await relay.UpdateAsync(Array.Empty<IPAddress>());
+        }
+        Assert.Empty(relay.Active);
+    }
+
+    [Fact]
+    public async Task Update_after_dispose_is_noop()
+    {
+        var relay = new RelaySet(0, new IPEndPoint(IPAddress.Loopback, 1), true);
+        await relay.DisposeAsync();
+        await relay.UpdateAsync(new[] { IPAddress.Loopback });
+        Assert.Empty(relay.Active);
+    }
+
+    [Fact]
+    public async Task BindFailed_subscriber_may_call_back_into_set()
+    {
+        using var blocker = new TcpListener(IPAddress.Loopback, 0);
+        blocker.Start();
+        await using var relay = new RelaySet(EndpointPort(blocker), new IPEndPoint(IPAddress.Loopback, 1), true);
+        Task? inner = null;
+        relay.BindFailed += (_, _) => inner = relay.UpdateAsync(Array.Empty<IPAddress>());
+
+        await relay.UpdateAsync(new[] { IPAddress.Loopback }).WaitAsync(Timeout);
+        Assert.NotNull(inner);
+        await inner!.WaitAsync(Timeout);
+    }
 }

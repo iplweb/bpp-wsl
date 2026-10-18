@@ -51,10 +51,11 @@ public sealed class RelaySet : IAsyncDisposable
             .Distinct()
             .ToList();
 
+        var failures = new List<(IPAddress, Exception)>();
         await _gate.WaitAsync().ConfigureAwait(false);
         try
         {
-            ObjectDisposedException.ThrowIf(_disposed, this);
+            if (_disposed) return;
 
             List<Listener> removed;
             lock (_lock)
@@ -62,7 +63,7 @@ public sealed class RelaySet : IAsyncDisposable
                 removed = _listeners.Where(kv => !wanted.Contains(kv.Key)).Select(kv => kv.Value).ToList();
                 foreach (var l in removed) _listeners.Remove(l.Address);
             }
-            foreach (var l in removed) await l.DisposeAsync().ConfigureAwait(false);
+            foreach (var l in removed) await SafeDisposeAsync(l).ConfigureAwait(false);
 
             foreach (var address in wanted)
             {
@@ -75,13 +76,22 @@ public sealed class RelaySet : IAsyncDisposable
                 }
                 catch (Exception ex)
                 {
-                    RaiseBindFailed(address, ex);
+                    failures.Add((address, ex));
                     continue;
                 }
                 lock (_lock) _listeners[address] = listener;
             }
         }
         finally { _gate.Release(); }
+
+        // raised outside the gate so subscribers may call back into the set
+        foreach (var (address, ex) in failures) RaiseBindFailed(address, ex);
+    }
+
+    private static async Task SafeDisposeAsync(Listener l)
+    {
+        try { await l.DisposeAsync().ConfigureAwait(false); }
+        catch { /* keep disposing the remaining listeners */ }
     }
 
     private void RaiseBindFailed(IPAddress address, Exception ex)
@@ -103,7 +113,7 @@ public sealed class RelaySet : IAsyncDisposable
                 all = _listeners.Values.ToList();
                 _listeners.Clear();
             }
-            foreach (var l in all) await l.DisposeAsync().ConfigureAwait(false);
+            foreach (var l in all) await SafeDisposeAsync(l).ConfigureAwait(false);
         }
         finally { _gate.Release(); }
     }
@@ -145,12 +155,15 @@ public sealed class RelaySet : IAsyncDisposable
             {
                 TcpClient client;
                 try { client = await _tcp.AcceptTcpClientAsync(ct).ConfigureAwait(false); }
+                catch (Exception) when (ct.IsCancellationRequested) { return; }
                 catch (OperationCanceledException) { return; }
                 catch (ObjectDisposedException) { return; }
-                catch (SocketException) when (ct.IsCancellationRequested) { return; }
+                catch (InvalidOperationException) { return; } // listener stopped
                 catch (SocketException)
                 {
-                    // transient accept error (e.g. connection reset before accept); keep listening
+                    // transient accept error; back off so a persistent one cannot spin
+                    try { await Task.Delay(100, ct).ConfigureAwait(false); }
+                    catch (OperationCanceledException) { return; }
                     continue;
                 }
 
@@ -174,7 +187,7 @@ public sealed class RelaySet : IAsyncDisposable
             Connection[] conns;
             lock (_connLock) conns = _connections.ToArray();
             foreach (var c in conns) c.Close();
-            await _acceptLoop.ConfigureAwait(false);
+            try { await _acceptLoop.ConfigureAwait(false); } catch { }
             foreach (var c in conns) await c.Completion.ConfigureAwait(false);
             _cts.Dispose();
         }
