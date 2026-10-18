@@ -74,6 +74,56 @@ public sealed class PayloadArchiveTests : IDisposable
     }
 
     [Fact]
+    public void ReadIndex_DecoyMagicAfterRealFooter_FindsRealIndex()
+    {
+        var exe = Write("setup.exe", Random(2000, 20));
+        var a = Random(2048, 21);
+        PayloadArchive.Append(exe, new[] { ("rootfs", Write("a.bin", a)) });
+        using (var fs = new FileStream(exe, FileMode.Append))
+        {
+            fs.Write("BPPPAYL1"u8);
+            fs.Write(Random(500, 22));
+            fs.Write("BPPPAYL1"u8);
+            fs.Write(Random(40, 23));
+        }
+
+        var index = PayloadArchive.ReadIndex(exe);
+        using var s = PayloadArchive.Open(exe, index["rootfs"]);
+        Assert.Equal(a, ReadAll(s));
+    }
+
+    [Fact]
+    public void ReadIndex_WorksWhileFileOpenWithDeleteSharing()
+    {
+        var exe = Write("setup.exe", Random(100, 24));
+        PayloadArchive.Append(exe, new[] { ("x", Write("x.bin", new byte[] { 1 })) });
+        using var other = new FileStream(exe, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        Assert.Single(PayloadArchive.ReadIndex(exe));
+    }
+
+    [Fact]
+    public void Pack_FailedAppend_DeletesPartialOutput()
+    {
+        var setup = Write("setup.exe", Random(100, 25));
+        var good = Write("good.bin", Random(100, 26));
+        var outExe = Path.Combine(_dir, "out.exe");
+        var dll = Path.Combine(AppContext.BaseDirectory, "BPP.Pack.dll");
+        var psi = new System.Diagnostics.ProcessStartInfo("dotnet")
+        {
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+        };
+        foreach (var a in new[] { dll, setup, outExe, $"ok={good}", $"bad={Path.Combine(_dir, "missing.bin")}" })
+            psi.ArgumentList.Add(a);
+        using var p = System.Diagnostics.Process.Start(psi)!;
+        p.StandardOutput.ReadToEnd();
+        p.StandardError.ReadToEnd();
+        p.WaitForExit();
+        Assert.Equal(1, p.ExitCode);
+        Assert.False(File.Exists(outExe));
+    }
+
+    [Fact]
     public void ReadIndex_NoPayload_Throws()
     {
         var exe = Write("plain.exe", Random(5000, 9));

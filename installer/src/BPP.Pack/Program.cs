@@ -53,6 +53,7 @@ internal static class Program
         }
         catch (Exception ex) when (ex is IOException or ArgumentException or UnauthorizedAccessException)
         {
+            try { File.Delete(args[1]); } catch (Exception) { /* best effort */ }
             Console.Error.WriteLine($"Błąd: {ex.Message}");
             return 1;
         }

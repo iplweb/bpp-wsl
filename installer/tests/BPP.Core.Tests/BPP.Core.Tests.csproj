@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\BPP.Core\BPP.Core.csproj" />
+    <ProjectReference Include="..\..\src\BPP.Pack\BPP.Pack.csproj" />
   </ItemGroup>
 
 </Project>

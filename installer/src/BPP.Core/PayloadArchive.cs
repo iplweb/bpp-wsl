@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 
 namespace BPP.Core;
@@ -40,14 +41,14 @@ public static class PayloadArchive
 
         Span<byte> footer = stackalloc byte[FooterSize];
         Magic.CopyTo(footer);
-        BitConverter.TryWriteBytes(footer.Slice(8, 8), indexOffset);
-        BitConverter.TryWriteBytes(footer.Slice(16, 8), (long)indexBytes.Length);
+        BinaryPrimitives.WriteInt64LittleEndian(footer.Slice(8, 8), indexOffset);
+        BinaryPrimitives.WriteInt64LittleEndian(footer.Slice(16, 8), indexBytes.Length);
         exe.Write(footer);
     }
 
     public static IReadOnlyDictionary<string, PayloadEntry> ReadIndex(string exePath)
     {
-        using var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+        using var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete);
         var fileLen = fs.Length;
         if (fileLen < FooterSize) throw new InvalidDataException("Brak ładunku w pliku (plik zbyt krótki).");
 
@@ -57,17 +58,26 @@ public static class PayloadArchive
         fs.Seek(windowStart, SeekOrigin.Begin);
         fs.ReadExactly(window);
 
-        // Ostatnie wystąpienie magic, które ma za sobą komplet stopki.
-        var searchIn = window.AsSpan(0, windowLen - FooterSize + 8);
-        var rel = searchIn.LastIndexOf(Magic);
-        if (rel < 0) throw new InvalidDataException("Brak ładunku w pliku (nie znaleziono znacznika).");
+        // Od końca: pierwszy kandydat na stopkę, który przejdzie walidację, wygrywa.
+        var searchEnd = windowLen - FooterSize + Magic.Length;
+        while (searchEnd >= Magic.Length)
+        {
+            var rel = window.AsSpan(0, searchEnd).LastIndexOf(Magic);
+            if (rel < 0) break;
+            searchEnd = rel + Magic.Length - 1;
+            var index = TryReadIndex(fs, window, rel, windowStart + rel);
+            if (index is not null) return index;
+        }
+        throw new InvalidDataException("Brak ładunku w pliku (nie znaleziono prawidłowej stopki).");
+    }
 
-        var footerPos = windowStart + rel;
-        var indexOffset = BitConverter.ToInt64(window, rel + 8);
-        var indexLength = BitConverter.ToInt64(window, rel + 16);
+    private static Dictionary<string, PayloadEntry>? TryReadIndex(FileStream fs, byte[] window, int rel, long footerPos)
+    {
+        var indexOffset = BinaryPrimitives.ReadInt64LittleEndian(window.AsSpan(rel + 8, 8));
+        var indexLength = BinaryPrimitives.ReadInt64LittleEndian(window.AsSpan(rel + 16, 8));
         if (indexOffset < 0 || indexLength <= 0 || indexLength > MaxIndexSize
             || indexOffset > footerPos || indexLength != footerPos - indexOffset)
-            throw new InvalidDataException("Uszkodzona stopka ładunku (nieprawidłowy offset lub długość indeksu).");
+            return null;
 
         var indexBytes = new byte[indexLength];
         fs.Seek(indexOffset, SeekOrigin.Begin);
@@ -78,21 +88,21 @@ public static class PayloadArchive
         {
             index = JsonSerializer.Deserialize<Dictionary<string, PayloadEntry>>(indexBytes, Json);
         }
-        catch (JsonException e)
+        catch (JsonException)
         {
-            throw new InvalidDataException("Uszkodzony indeks ładunku.", e);
+            return null;
         }
-        if (index is null) throw new InvalidDataException("Uszkodzony indeks ładunku.");
+        if (index is null) return null;
 
-        foreach (var (name, e) in index)
+        foreach (var (_, e) in index)
             if (e is null || e.Offset < 0 || e.Length < 0 || e.Offset > indexOffset || e.Length > indexOffset - e.Offset)
-                throw new InvalidDataException($"Wpis '{name}' wykracza poza dane ładunku.");
+                return null;
         return index;
     }
 
     public static Stream Open(string exePath, PayloadEntry e)
     {
-        var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize);
+        var fs = new FileStream(exePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, BufferSize);
         try
         {
             if (e.Offset < 0 || e.Length < 0 || e.Offset > fs.Length || e.Length > fs.Length - e.Offset)
