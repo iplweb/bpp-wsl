@@ -17,20 +17,34 @@ public sealed class WslClient
     public event Action<string>? LogLine;
 
     public async Task<bool> IsWslReadyAsync()
-        => (await ProcessRunner.RunAsync(WslExe, new[] { "--status" }, utf8Env: true)).ExitCode == 0;
+    {
+        var r = await TryRunWslAsync("--status").ConfigureAwait(false);
+        return r is { ExitCode: 0 };
+    }
 
     public async Task<bool> DistroExistsAsync()
     {
-        var r = await ProcessRunner.RunAsync(WslExe, new[] { "-l", "-q" }, utf8Env: true);
-        if (r.ExitCode != 0) return false;
+        var r = await TryRunWslAsync("-l", "-q").ConfigureAwait(false);
+        if (r is not { ExitCode: 0 }) return false;
         return r.StdOut.Split('\n')
             .Any(l => string.Equals(l.Trim(), AppPaths.DistroName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>Null when wsl.exe is missing or cannot be started.</summary>
+    private static async Task<ProcessResult?> TryRunWslAsync(params string[] args)
+    {
+        if (!File.Exists(WslExe)) return null;
+        try { return await ProcessRunner.RunAsync(WslExe, args, utf8Env: true).ConfigureAwait(false); }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            return null;
+        }
     }
 
     public async Task ImportAsync(string tarPath)
     {
         Directory.CreateDirectory(AppPaths.DistroDir);
-        await RunWslAsync("import", "--import", AppPaths.DistroName, AppPaths.DistroDir, tarPath, "--version", "2");
+        await RunWslAsync("import", "--import", AppPaths.DistroName, AppPaths.DistroDir, tarPath, "--version", "2").ConfigureAwait(false);
     }
 
     public Task UnregisterAsync() => RunWslAsync("unregister", "--unregister", AppPaths.DistroName);
@@ -43,7 +57,7 @@ public sealed class WslClient
         try
         {
             await ProcessRunner.RunAsync(WslExe,
-                new[] { "--manage", AppPaths.DistroName, "--set-sparse", "true" }, utf8Env: true);
+                new[] { "--manage", AppPaths.DistroName, "--set-sparse", "true" }, utf8Env: true).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
         {
@@ -70,6 +84,7 @@ public sealed class WslClient
             string? line;
             while ((line = await p.StandardOutput.ReadLineAsync(ct).ConfigureAwait(false)) != null)
             {
+                line = WslText.CleanLine(line);
                 if (BppEventParser.TryParse(line, out var ev) && ev != null)
                 {
                     last = ev;
@@ -93,29 +108,32 @@ public sealed class WslClient
     }
 
     /// <summary>Runs bpp-ctl and returns stdout (for <c>logs</c> / <c>status</c>). Throws on non-zero exit.</summary>
-    public async Task<string> RunCtlTextAsync(string args)
+    public async Task<string> RunCtlTextAsync(string args, CancellationToken ct = default)
     {
-        using var p = StartCtl(args);
-        var stderrTask = PumpStderrAsync(p);
-        var stdout = await p.StandardOutput.ReadToEndAsync().ConfigureAwait(false);
-        await p.WaitForExitAsync().ConfigureAwait(false);
-        await stderrTask.ConfigureAwait(false);
+        var r = await ProcessRunner.RunAsync(WslExe, CtlArgv(args), utf8Env: true, ct).ConfigureAwait(false);
+        foreach (var l in r.StdErr.Split('\n'))
+            if (l.Length > 0) LogLine?.Invoke(l);
 
-        if (p.ExitCode != 0)
+        if (r.ExitCode != 0)
         {
-            var msg = stdout.Split('\n')
+            var msg = r.StdOut.Split('\n')
                 .Select(l => BppEventParser.TryParse(l.Trim(), out var ev) ? ev : null)
                 .LastOrDefault(e => e?.Step == "error")?.Message;
-            throw new InvalidOperationException(msg ?? $"bpp-ctl {args} zakończył się kodem {p.ExitCode}.");
+            throw new InvalidOperationException(msg ?? $"bpp-ctl {args} zakończył się kodem {r.ExitCode}.");
         }
-        return stdout;
+        return r.StdOut;
+    }
+
+    private static List<string> CtlArgv(string args)
+    {
+        var argv = new List<string> { "-d", AppPaths.DistroName, "-u", "root", "--", CtlPath };
+        argv.AddRange(args.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+        return argv;
     }
 
     private static Process StartCtl(string args)
     {
-        var argv = new List<string> { "-d", AppPaths.DistroName, "-u", "root", "--", CtlPath };
-        argv.AddRange(args.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-        var psi = ProcessRunner.CreateStartInfo(WslExe, argv, utf8Env: true);
+        var psi = ProcessRunner.CreateStartInfo(WslExe, CtlArgv(args), utf8Env: true);
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
         return Process.Start(psi) ?? throw new InvalidOperationException("Nie można uruchomić wsl.exe.");
@@ -125,12 +143,15 @@ public sealed class WslClient
     {
         string? line;
         while ((line = await p.StandardError.ReadLineAsync().ConfigureAwait(false)) != null)
+        {
+            line = WslText.CleanLine(line);
             if (line.Length > 0) LogLine?.Invoke(line);
+        }
     }
 
     private static async Task RunWslAsync(string what, params string[] args)
     {
-        var r = await ProcessRunner.RunAsync(WslExe, args, utf8Env: true);
+        var r = await ProcessRunner.RunAsync(WslExe, args, utf8Env: true).ConfigureAwait(false);
         if (r.ExitCode != 0)
         {
             var detail = string.IsNullOrWhiteSpace(r.StdErr) ? r.StdOut : r.StdErr;

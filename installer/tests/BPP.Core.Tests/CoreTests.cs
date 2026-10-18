@@ -103,3 +103,9 @@ public class PreflightTests
 
     [Fact] public void Preflight_refuses_little_disk() => Assert.Contains(PreflightProblem.TooLittleDisk, Preflight.Check(new(16UL << 30, (25L << 30) - 1, Architecture.X64, true)));
 }
+
+public class WslTextCleanLineTests
+{
+    [Fact] public void Strips_nul_and_cr() => Assert.Equal("abc", WslText.CleanLine("a\0b\0c\r"));
+    [Fact] public void Leaves_plain_text() => Assert.Equal("ok żółć", WslText.CleanLine("ok żółć"));
+}

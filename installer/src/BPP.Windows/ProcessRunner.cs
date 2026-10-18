@@ -32,11 +32,13 @@ internal static class ProcessRunner
         var outTask = ReadAllAsync(p.StandardOutput.BaseStream);
         var errTask = ReadAllAsync(p.StandardError.BaseStream);
         await p.WaitForExitAsync(ct).ConfigureAwait(false);
-        return new ProcessResult(p.ExitCode, WslText.Decode(await outTask), WslText.Decode(await errTask));
+        var stdout = await outTask.ConfigureAwait(false);
+        var stderr = await errTask.ConfigureAwait(false);
+        return new ProcessResult(p.ExitCode, WslText.Decode(stdout), WslText.Decode(stderr));
     }
 
     public static ProcessResult Run(string file, IEnumerable<string> args)
-        => RunAsync(file, args).GetAwaiter().GetResult();
+        => Task.Run(() => RunAsync(file, args)).GetAwaiter().GetResult();
 
     public static void TryKill(Process p)
     {

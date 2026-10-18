@@ -10,6 +10,9 @@ public static class WslText
         return text.TrimStart('﻿').Replace("\0", "").Replace("\r", "");
     }
 
+    /// <summary>Cleans one line of child output: drops NULs (UTF-16 leftovers) and CRs.</summary>
+    public static string CleanLine(string line) => line.Replace("\0", "").Replace("\r", "");
+
     private static bool IsUtf16Le(byte[] raw)
     {
         if (raw.Length >= 2 && raw[0] == 0xFF && raw[1] == 0xFE) return true;
