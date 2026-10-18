@@ -245,3 +245,44 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   MOCK_WEBSERVER_RUNNING=1 "$CTL" init --hosts localhost,10.3.3.3 >/dev/null 2>&1
   grep -q 'exec -T webserver nginx -s reload' "$MOCK_DOCKER_LOG"
 }
+
+@test "init/start/stop wait for docker info before any compose call" {
+  export MOCK_DOCKER_INFO_FAILS=2 BPP_DOCKER_WAIT_INTERVAL=0.2
+  run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(last_step)" = ready ]
+  [ "$(grep -c '^docker info' "$MOCK_DOCKER_LOG")" -ge 3 ]
+  # pierwsze polecenie dockera to `docker info`, compose dopiero po udanym info
+  [ "$(head -n 1 "$MOCK_DOCKER_LOG")" = "docker info" ]
+  first_compose=$(grep -n '^docker compose' "$MOCK_DOCKER_LOG" | head -n 1 | cut -d: -f1)
+  third_info=$(grep -n '^docker info' "$MOCK_DOCKER_LOG" | sed -n 3p | cut -d: -f1)
+  [ "$first_compose" -gt "$third_info" ]
+  printf '%s\n' "${lines[@]}" | jq -e -s 'any(.[]; .step == "config" and (.message | test("Docker")))' >/dev/null
+
+  for cmd in "start --hosts localhost" stop; do
+    rm -f "$MOCK_DOCKER_LOG.info-calls"
+    : >"$MOCK_DOCKER_LOG"
+    run bash -c "\"\$CTL\" $cmd 2>/dev/null"
+    [ "$status" -eq 0 ]
+    [ "$(head -n 1 "$MOCK_DOCKER_LOG")" = "docker info" ]
+    [ "$(grep -c '^docker info' "$MOCK_DOCKER_LOG")" -ge 3 ]
+  done
+  # stop: stdout pusty takze podczas czekania (komunikat tylko na stderr)
+  [ -z "$output" ]
+}
+
+@test "docker never starts -> error 'Docker nie wystartował', no compose calls" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  export MOCK_DOCKER_INFO_FAILS=1000 BPP_DOCKER_WAIT_TIMEOUT=1 BPP_DOCKER_WAIT_INTERVAL=0.2
+  for cmd in "init --hosts localhost" "start --hosts localhost" stop; do
+    rm -f "$MOCK_DOCKER_LOG.info-calls"
+    : >"$MOCK_DOCKER_LOG"
+    start=$SECONDS
+    run bash -c "\"\$CTL\" $cmd 2>/dev/null"
+    [ "$status" -eq 1 ]
+    [ $((SECONDS - start)) -lt 5 ]
+    [ "$(last_step)" = error ]
+    [[ "$(echo "${lines[-1]}" | jq -r .message)" == *"Docker nie wystartował"* ]]
+    ! grep -q '^docker compose' "$MOCK_DOCKER_LOG"
+  done
+}

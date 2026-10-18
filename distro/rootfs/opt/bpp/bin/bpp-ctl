@@ -45,6 +45,22 @@ appserver_health() {
   esac
 }
 
+# wait_docker [event] - czeka (do BPP_DOCKER_WAIT_TIMEOUT s, domyslnie 60), az demon Dockera
+# odpowie na `docker info`: przy zimnym starcie dystrybucji dockerd moze jeszcze nie wstac.
+# Z "event" komunikat idzie tez jako zdarzenie config (init/start); bez - tylko na stderr
+# (stop: stdout ma zostac pusty).
+wait_docker() {
+  local timeout="${BPP_DOCKER_WAIT_TIMEOUT:-60}" interval="${BPP_DOCKER_WAIT_INTERVAL:-1}" deadline
+  docker info >/dev/null 2>&1 && return 0
+  deadline=$((SECONDS + timeout))
+  echo "Oczekiwanie na uruchomienie Dockera (do $timeout s)..." >&2
+  [ "${1:-}" != event ] || emit config null "Oczekiwanie na uruchomienie Dockera"
+  until docker info >/dev/null 2>&1; do
+    ((SECONDS < deadline)) || fail "Docker nie wystartował w ciągu $timeout s"
+    sleep "$interval"
+  done
+}
+
 wait_healthy() {
   local interval="${BPP_HEALTH_INTERVAL:-5}" h
   while :; do
@@ -96,6 +112,7 @@ cmd_start() {
   hwclock -s 2>/dev/null || true
   emit config null "Sprawdzanie konfiguracji"
   [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
+  wait_docker event
 
   ensure_hosts_config
 
@@ -121,6 +138,7 @@ cmd_start() {
 cmd_init() {
   parse_hosts "$@"
   emit config null "Przygotowanie konfiguracji"
+  wait_docker event
   state_ensure_env || fail "Nie udało się utworzyć state/.env (brak image-tag?)"
   # compose (config --images) wymaga plikow env_file, w tym state/hosts.env.
   ensure_hosts_config
@@ -129,6 +147,7 @@ cmd_init() {
 }
 
 cmd_stop() {
+  wait_docker
   bpp_compose stop >&2 || fail "docker compose stop nie powiodło się"
 }
 
