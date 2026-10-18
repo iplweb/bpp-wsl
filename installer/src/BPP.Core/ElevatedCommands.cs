@@ -11,7 +11,6 @@ public sealed record ElevatedCommand(string FileName, string Arguments);
 /// </summary>
 public static class ElevatedCommands
 {
-    public const string FirewallRuleName = "BPP (8443)";
     public const int Port = 8443;
 
     private static readonly Regex AbsoluteWindowsPath = new(@"^([A-Za-z]:\\|\\\\)", RegexOptions.Compiled);
@@ -24,20 +23,33 @@ public static class ElevatedCommands
         "/all", "/norestart",
     }));
 
-    /// <summary>Inbound allow rule for <paramref name="programPath"/> (absolute, no quotes), TCP 8443, all profiles.</summary>
-    public static ElevatedCommand AddFirewallRule(string programPath)
+    /// <summary>
+    /// Inbound allow rule <paramref name="ruleName"/> (see <see cref="FirewallRuleName"/>) for
+    /// <paramref name="programPath"/> (absolute, no quotes), TCP 8443, all profiles.
+    /// </summary>
+    public static ElevatedCommand AddFirewallRule(string ruleName, string programPath)
     {
+        RequireRuleName(ruleName);
         if (!AbsoluteWindowsPath.IsMatch(programPath) || programPath.Contains('"') || programPath.Contains(".."))
             throw new ArgumentException($"Wymagana bezwzględna ścieżka programu: '{programPath}'.", nameof(programPath));
 
         return new("netsh.exe", string.Join(' ',
-            "advfirewall firewall add rule", Kv("name", FirewallRuleName), "dir=in action=allow",
+            "advfirewall firewall add rule", Kv("name", ruleName), "dir=in action=allow",
             Kv("program", programPath), $"protocol=TCP localport={Port} profile=any enable=yes"));
     }
 
-    public static ElevatedCommand DeleteFirewallRule()
-        => new("netsh.exe", "advfirewall firewall delete rule " + Kv("name", FirewallRuleName));
+    public static ElevatedCommand DeleteFirewallRule(string ruleName)
+    {
+        RequireRuleName(ruleName);
+        return new("netsh.exe", "advfirewall firewall delete rule " + Kv("name", ruleName));
+    }
 
-    /// <summary><c>key=value</c> with the value quoted when needed: <c>name="BPP (8443)"</c>.</summary>
+    private static void RequireRuleName(string ruleName)
+    {
+        if (!FirewallRuleName.IsValid(ruleName))
+            throw new ArgumentException($"Nieprawidłowa nazwa reguły zapory: '{ruleName}'.", nameof(ruleName));
+    }
+
+    /// <summary><c>key=value</c> with the value quoted when needed: <c>name="BPP (8443) 1a2b3c4d"</c>.</summary>
     private static string Kv(string key, string value) => key + "=" + ElevatedArgs.Quote(value);
 }

@@ -108,6 +108,11 @@ pobierania:
   dopóki działa (reguła zapory obejmuje profile Prywatny, Domena i Publiczny).
   To świadomy wybór (R9), nie przeoczenie. Bez reguły zapory (odmowa UAC)
   BPP jest dostępne tylko lokalnie.
+- Reguła zapory jest **osobna dla każdego konta Windows**: nazywa się
+  `BPP (8443) <8 znaków hex>`, gdzie sufiks to pierwsze 8 cyfr SHA-256
+  z SID-u użytkownika, który instaluje (liczony w procesie bez uprawnień
+  administratora). Odinstalowanie BPP z jednego konta nie usuwa reguły
+  drugiego konta na tym samym komputerze.
 - Kreator `/setup` jest osiągalny z sieci lokalnej, **dopóki nie powstanie
   konto administratora** — pierwszy, kto go otworzy, ustawia hasło admina.
   Załóż konto od razu po instalacji.

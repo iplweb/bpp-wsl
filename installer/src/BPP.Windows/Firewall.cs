@@ -3,7 +3,10 @@ using BPP.Core;
 
 namespace BPP.Windows;
 
-/// <summary>Inbound firewall rule for the app's own port. Changes go through an elevated System32 netsh.exe.</summary>
+/// <summary>
+/// The current user's inbound firewall rule (<see cref="AppPaths.FirewallRuleName"/>) for the app's own port.
+/// Changes go through an elevated System32 netsh.exe.
+/// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class Firewall
 {
@@ -21,9 +24,9 @@ public sealed class Firewall
     /// Returns 0 on success (or when it already exists), netsh's exit code on failure, null when UAC was refused.
     /// </summary>
     public int? AddElevated(string programPath)
-        => RuleExists() ? 0 : Elevation.Run(ElevatedCommands.AddFirewallRule(programPath));
+        => RuleExists() ? 0 : Elevation.Run(ElevatedCommands.AddFirewallRule(AppPaths.FirewallRuleName, programPath));
 
     /// <summary>Removes the rule with one UAC prompt, only when it exists. Same return contract as AddElevated.</summary>
     public int? RemoveElevated()
-        => RuleExists() ? Elevation.Run(ElevatedCommands.DeleteFirewallRule()) : 0;
+        => RuleExists() ? Elevation.Run(ElevatedCommands.DeleteFirewallRule(AppPaths.FirewallRuleName)) : 0;
 }

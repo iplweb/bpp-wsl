@@ -45,7 +45,8 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   Wynik:
 - [ ] **9.** „Zatrzymaj” → `wsl -l -v` pokazuje BPP jako Stopped.
   Wynik:
-- [ ] **10.** „Odinstaluj” → brak dystrybucji, reguły zapory, katalogów w
+- [ ] **10.** „Odinstaluj” → brak dystrybucji, reguły zapory
+  `BPP (8443) <hex>` tego użytkownika, katalogów w
   `%LOCALAPPDATA%`, skrótu, wpisu w „Aplikacje i funkcje”. Inne dystrybucje
   WSL nietknięte.
   Wynik:

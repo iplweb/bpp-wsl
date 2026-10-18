@@ -18,26 +18,54 @@ public class ElevationContractTests
                      "/featurename:VirtualMachinePlatform /all /norestart", c.Arguments);
     }
 
+    private const string Rule = "BPP (8443) 72c8a69c";
+
+    // Expected values computed outside this code: printf %s '<sid>' | shasum -a 256 (first 8 hex digits).
+    [Theory]
+    [InlineData("S-1-5-21-3623811015-3361044348-30300820-1013", "BPP (8443) 72c8a69c")]
+    [InlineData("S-1-5-21-1004336348-1177238915-682003330-512", "BPP (8443) efbcf4ba")]
+    public void Firewall_rule_name_is_per_user_sha256_of_sid(string sid, string expected)
+        => Assert.Equal(expected, FirewallRuleName.ForUser(sid));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("  ")]
+    public void Firewall_rule_name_needs_a_sid(string sid)
+        => Assert.Throws<ArgumentException>(() => FirewallRuleName.ForUser(sid));
+
+    [Theory]
+    [InlineData("BPP (8443)")]
+    [InlineData("BPP (8443) 72C8A69C")]
+    [InlineData("BPP (8443) 72c8a69")]
+    [InlineData("BPP (8443) 72c8a69c\" dir=out")]
+    [InlineData("")]
+    public void Firewall_builders_reject_names_that_are_not_derived_rule_names(string name)
+    {
+        Assert.False(FirewallRuleName.IsValid(name));
+        Assert.Throws<ArgumentException>(() => ElevatedCommands.AddFirewallRule(name, @"C:\BPP\BPP.exe"));
+        Assert.Throws<ArgumentException>(() => ElevatedCommands.DeleteFirewallRule(name));
+    }
+
     [Fact]
     public void Add_firewall_rule_quotes_name_and_program_path_with_spaces()
     {
-        var c = ElevatedCommands.AddFirewallRule(@"C:\Users\Jan Kowalski\AppData\Local\Programs\BPP\BPP.exe");
+        var c = ElevatedCommands.AddFirewallRule(Rule, @"C:\Users\Jan Kowalski\AppData\Local\Programs\BPP\BPP.exe");
         Assert.Equal("netsh.exe", c.FileName);
-        Assert.Equal("advfirewall firewall add rule name=\"BPP (8443)\" dir=in action=allow " +
+        Assert.Equal("advfirewall firewall add rule name=\"BPP (8443) 72c8a69c\" dir=in action=allow " +
                      "program=\"C:\\Users\\Jan Kowalski\\AppData\\Local\\Programs\\BPP\\BPP.exe\" " +
                      "protocol=TCP localport=8443 profile=any enable=yes", c.Arguments);
     }
 
     [Fact]
     public void Add_firewall_rule_path_without_spaces_is_left_bare()
-        => Assert.Contains(" program=C:\\BPP\\BPP.exe ", ElevatedCommands.AddFirewallRule(@"C:\BPP\BPP.exe").Arguments);
+        => Assert.Contains(" program=C:\\BPP\\BPP.exe ", ElevatedCommands.AddFirewallRule(Rule, @"C:\BPP\BPP.exe").Arguments);
 
     [Fact]
     public void Delete_firewall_rule_by_name()
     {
-        var c = ElevatedCommands.DeleteFirewallRule();
+        var c = ElevatedCommands.DeleteFirewallRule(Rule);
         Assert.Equal("netsh.exe", c.FileName);
-        Assert.Equal("advfirewall firewall delete rule name=\"BPP (8443)\"", c.Arguments);
+        Assert.Equal("advfirewall firewall delete rule name=\"BPP (8443) 72c8a69c\"", c.Arguments);
     }
 
     [Theory]
@@ -46,7 +74,7 @@ public class ElevationContractTests
     [InlineData(@"C:\a\"" & calc & ""\BPP.exe")]
     [InlineData("")]
     public void Add_firewall_rule_rejects_relative_or_quoted_paths(string path)
-        => Assert.Throws<ArgumentException>(() => ElevatedCommands.AddFirewallRule(path));
+        => Assert.Throws<ArgumentException>(() => ElevatedCommands.AddFirewallRule(Rule, path));
 
     [Theory]
     [InlineData("simple", "simple")]
