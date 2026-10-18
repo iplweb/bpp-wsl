@@ -19,8 +19,9 @@ public enum InstallerStep
     StopDistro,
     AddFirewall,
     CreateShortcut,
+    StopRunningBpp, // only after "Zatrzymaj BPP" on the PreflightFailed page
 
-    // final pages
+    // final pages (keep after every action: IsFinal compares with Done)
     Done,
     RestartRequired,
     PreflightFailed,
@@ -60,6 +61,15 @@ public sealed record InstallerState
 
     /// <summary>Firewall rule present after <see cref="InstallerStep.AddFirewall"/>; false = BPP stays localhost-only.</summary>
     public bool FirewallOk { get; init; }
+
+    /// <summary>Preflight failed only on port 8443, apparently held by a running BPP distro (<see cref="Preflight.PortHeldByBpp"/>).</summary>
+    public bool PortHeldByBpp { get; init; }
+
+    /// <summary>The user clicked "Zatrzymaj BPP" on the PreflightFailed page.</summary>
+    public bool StopBppRequested { get; init; }
+
+    /// <summary><see cref="InstallerStep.StopRunningBpp"/> ran (it is offered only once).</summary>
+    public bool StopBppAttempted { get; init; }
 }
 
 /// <summary>Pure state machine of the installer steps (spec 4.4); the WinForms flow only executes it.</summary>
@@ -70,7 +80,9 @@ public static class InstallerPlan
     public static InstallerStep Next(InstallerState s) => s.Completed switch
     {
         null => InstallerStep.Preflight,
-        InstallerStep.Preflight => s.PreflightOk ? InstallerStep.ExtractTray : InstallerStep.PreflightFailed,
+        InstallerStep.Preflight => s.PreflightOk ? InstallerStep.ExtractTray
+            : s.StopBppRequested && !s.StopBppAttempted ? InstallerStep.StopRunningBpp : InstallerStep.PreflightFailed,
+        InstallerStep.StopRunningBpp => InstallerStep.Preflight,
         // Right after BPP.exe exists, so a partial or cancelled install can be removed from Settings.
         InstallerStep.ExtractTray => InstallerStep.RegisterUninstall,
         InstallerStep.RegisterUninstall => InstallerStep.CheckWsl,
@@ -125,6 +137,18 @@ public static class InstallerPlan
         if (!CanRetry(Next(s)))
             throw new InvalidOperationException("Ponowić można tylko nieudany krok konfiguracji (bpp-ctl init).");
         return s with { Init = InitOutcome.NotRun, Completed = InstallerStep.RunInit };
+    }
+
+    /// <summary>The PreflightFailed page offers "Zatrzymaj BPP": port held by a running BPP distro, not tried yet.</summary>
+    public static bool CanStopBpp(InstallerState s)
+        => Next(s) == InstallerStep.PreflightFailed && s.PortHeldByBpp && !s.StopBppAttempted;
+
+    /// <summary>State that makes <see cref="Next"/> stop the running BPP distro and then re-run preflight.</summary>
+    public static InstallerState StopBpp(InstallerState s)
+    {
+        if (!CanStopBpp(s))
+            throw new InvalidOperationException("Zatrzymać BPP można tylko, gdy port 8443 zajmuje działające BPP.");
+        return s with { StopBppRequested = true };
     }
 
     public static EnableWslOutcome ClassifyEnableWsl(int? exitCode) => exitCode switch

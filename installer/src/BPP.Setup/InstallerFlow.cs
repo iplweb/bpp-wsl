@@ -60,6 +60,13 @@ internal sealed class InstallerFlow
         return LoopAsync();
     }
 
+    /// <summary>"Zatrzymaj BPP" on the preflight page: stop the running distro, then check the computer again.</summary>
+    public Task StopBppAsync()
+    {
+        _state = InstallerPlan.StopBpp(_state);
+        return LoopAsync();
+    }
+
     private async Task LoopAsync()
     {
         IsRunning = true;
@@ -102,9 +109,19 @@ internal sealed class InstallerFlow
         {
             case Step.Preflight:
                 _ui.SetStatus("Sprawdzanie wymagań komputera…", null);
-                _preflightProblems = await Task.Run(CheckComputer);
+                var check = await Task.Run(CheckComputer);
+                // a WSL process on 8443 + the BPP distro: most likely BPP left running without the tray
+                var bppDistro = check.Problems.Contains(PreflightProblem.PortBusy)
+                                && Preflight.IsWslProcess(check.PortOwner) && await _wsl.DistroExistsAsync();
+                var heldByBpp = Preflight.PortHeldByBpp(check.Problems, check.PortOwner, bppDistro);
+                _preflightProblems = Describe(check, heldByBpp, s.StopBppAttempted);
                 foreach (var p in _preflightProblems) _ui.AppendLog(p);
-                return s with { PreflightOk = _preflightProblems.Count == 0 };
+                return s with { PreflightOk = check.Problems.Count == 0, PortHeldByBpp = heldByBpp };
+
+            case Step.StopRunningBpp:
+                _ui.SetStatus("Zatrzymywanie BPP…", null);
+                await StopDistroAsync();
+                return s with { StopBppAttempted = true };
 
             case Step.ExtractTray:
                 _ui.SetStatus("Kopiowanie programu BPP…", null);
@@ -194,7 +211,8 @@ internal sealed class InstallerFlow
                 _ui.ShowRestart();
                 break;
             case Step.PreflightFailed:
-                _ui.ShowError("Ten komputer nie spełnia wymagań BPP", _preflightProblems, canRetry: false);
+                _ui.ShowError("Ten komputer nie spełnia wymagań BPP", _preflightProblems, canRetry: false,
+                    canStopBpp: InstallerPlan.CanStopBpp(_state));
                 break;
             case Step.WslNeedsAdmin:
                 _ui.ShowError("Nie można włączyć WSL", WithImportError(
@@ -246,31 +264,50 @@ internal sealed class InstallerFlow
 
     // ---- steps ----------------------------------------------------------------------------------------
 
-    private static IReadOnlyList<string> CheckComputer()
+    private sealed record ComputerCheck(
+        PreflightInput Input, IReadOnlyList<PreflightProblem> Problems, string DriveName, string? PortOwner);
+
+    private static ComputerCheck CheckComputer()
     {
         var ports = new Ports();
         var drive = new DriveInfo(Path.GetPathRoot(AppPaths.DistroDir)!);
         var input = new PreflightInput(InstalledRamBytes(), drive.AvailableFreeSpace,
             RuntimeInformation.OSArchitecture, ports.IsPortFree(AppPaths.Port));
+        var problems = Preflight.Check(input);
+        var owner = problems.Contains(PreflightProblem.PortBusy) ? ports.OwnerProcessName(AppPaths.Port) : null;
+        return new ComputerCheck(input, problems, drive.Name, owner);
+    }
 
-        return Preflight.Check(input).Select(p => p switch
+    private static IReadOnlyList<string> Describe(ComputerCheck check, bool heldByBpp, bool stopAttempted)
+    {
+        var input = check.Input;
+        return check.Problems.Select(p => p switch
         {
             PreflightProblem.NotX64 =>
                 $"BPP wymaga 64-bitowego procesora x64 (ten komputer: {RuntimeInformation.OSArchitecture}).",
             PreflightProblem.TooLittleRam =>
                 $"Za mało pamięci RAM: {Gb(input.TotalRamBytes)} GB, wymagane co najmniej {Gb(Preflight.MinRam)} GB.",
             PreflightProblem.TooLittleDisk =>
-                $"Za mało wolnego miejsca na dysku {drive.Name}: {Gb((ulong)input.FreeDiskBytes)} GB, " +
+                $"Za mało wolnego miejsca na dysku {check.DriveName}: {Gb((ulong)input.FreeDiskBytes)} GB, " +
                 $"wymagane co najmniej {Gb((ulong)Preflight.MinDisk)} GB.",
-            PreflightProblem.PortBusy => PortBusyMessage(ports.OwnerProcessName(AppPaths.Port)),
+            PreflightProblem.PortBusy => PortBusyMessage(check.PortOwner, heldByBpp, stopAttempted),
             _ => p.ToString(),
         }).ToList();
     }
 
-    private static string PortBusyMessage(string? owner)
-        => $"Port {AppPaths.Port} jest zajęty przez " + (owner != null ? $"program „{owner}”." : "inny program.") +
-           " Zamknij ten program i uruchom instalator ponownie. Jeśli to działające BPP, zatrzymaj je " +
-           "(ikonka BPP w zasobniku → Zatrzymaj).";
+    private static string PortBusyMessage(string? owner, bool heldByBpp, bool stopAttempted)
+    {
+        var who = owner != null ? $"program „{owner}”" : "inny program";
+        if (heldByBpp && !stopAttempted)
+            return $"Port {AppPaths.Port} jest zajęty przez {who} — najpewniej to działające BPP (dystrybucja WSL " +
+                   "„BPP”). Kliknij „Zatrzymaj BPP”: instalator je zatrzyma i ponownie sprawdzi wymagania.";
+        if (stopAttempted && Preflight.IsWslProcess(owner))
+            return $"Port {AppPaths.Port} jest nadal zajęty przez {who}, mimo zatrzymania BPP — prawdopodobnie " +
+                   "używa go inna dystrybucja WSL. Zatrzymaj ją (lub uruchom ponownie komputer) i uruchom " +
+                   "instalator ponownie.";
+        return $"Port {AppPaths.Port} jest zajęty przez {who}. Zamknij ten program i uruchom instalator ponownie. " +
+               "Jeśli to działające BPP, zatrzymaj je (ikonka BPP w zasobniku → Zatrzymaj).";
+    }
 
     private static string Gb(ulong bytes) => (bytes / (double)(1UL << 30)).ToString("0.#");
 

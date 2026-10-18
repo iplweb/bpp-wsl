@@ -94,6 +94,8 @@ internal sealed class SetupForm : Form
 
     private void Retry() => RunFlow(f => f.RetryAsync());
 
+    private void StopBpp() => RunFlow(f => f.StopBppAsync());
+
     /// <summary>The flow never throws (it shows the Error page); closes the window if that was requested meanwhile.</summary>
     private async void RunFlow(Func<InstallerFlow, Task> run)
     {
@@ -120,11 +122,13 @@ internal sealed class SetupForm : Form
         catch (InvalidOperationException) { /* handle destroyed while closing */ }
     }
 
-    public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry)
+    /// <param name="canStopBpp">Offer "Zatrzymaj BPP" (port 8443 held by a running BPP distro).</param>
+    public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry, bool canStopBpp = false)
     {
         string log;
         lock (_logLock) log = _log.ToString();
-        ShowPage(new ErrorPage(title, problems, log, canRetry ? Retry : null, Close));
+        ShowPage(new ErrorPage(title, problems, log, canRetry ? Retry : null, Close,
+            canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp) : null));
     }
 
     public void ShowDone(bool lanEnabled)

@@ -101,6 +101,40 @@ public class PreflightTests
         Assert.Contains(PreflightProblem.PortBusy, p);
     }
 
+    [Theory]
+    [InlineData("wslrelay", true)]
+    [InlineData("WSLRELAY", true)]
+    [InlineData("wslhost", true)]
+    [InlineData("wslservice", true)]
+    [InlineData("vmmem", true)]
+    [InlineData("vmmemWSL", true)]
+    [InlineData("BPP", false)]
+    [InlineData("nginx", false)]
+    [InlineData("httpd", false)]
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    public void Wsl_port_owners(string? name, bool wsl) => Assert.Equal(wsl, Preflight.IsWslProcess(name));
+
+    [Fact]
+    public void Port_held_by_running_bpp_when_only_the_port_is_busy_by_wsl_and_the_distro_exists()
+        => Assert.True(Preflight.PortHeldByBpp(new[] { PreflightProblem.PortBusy }, "wslrelay", bppDistroExists: true));
+
+    [Fact]
+    public void Port_not_attributed_to_bpp_without_the_distro_or_with_a_foreign_owner()
+    {
+        Assert.False(Preflight.PortHeldByBpp(new[] { PreflightProblem.PortBusy }, "wslrelay", bppDistroExists: false));
+        Assert.False(Preflight.PortHeldByBpp(new[] { PreflightProblem.PortBusy }, "httpd", bppDistroExists: true));
+        Assert.False(Preflight.PortHeldByBpp(new[] { PreflightProblem.PortBusy }, null, bppDistroExists: true));
+    }
+
+    [Fact]
+    public void Stopping_bpp_is_not_offered_when_it_would_not_fix_preflight()
+    {
+        Assert.False(Preflight.PortHeldByBpp(
+            new[] { PreflightProblem.TooLittleRam, PreflightProblem.PortBusy }, "wslrelay", bppDistroExists: true));
+        Assert.False(Preflight.PortHeldByBpp(Array.Empty<PreflightProblem>(), "wslrelay", bppDistroExists: true));
+    }
+
     [Fact] public void Preflight_refuses_little_disk() => Assert.Contains(PreflightProblem.TooLittleDisk, Preflight.Check(new(16UL << 30, (25L << 30) - 1, Architecture.X64, true)));
 }
 

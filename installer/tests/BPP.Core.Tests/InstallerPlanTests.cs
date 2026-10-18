@@ -30,6 +30,49 @@ public class InstallerPlanTests
     public void Uninstall_entry_then_wsl_check()
         => Assert.Equal(S.CheckWsl, InstallerPlan.Next(After(S.RegisterUninstall)));
 
+    // ---- 1a. port 8443 held by a running BPP distro (no tray) ----
+
+    private static InstallerState HeldByBpp => After(S.Preflight) with { PreflightOk = false, PortHeldByBpp = true };
+
+    [Fact]
+    public void Port_held_by_bpp_shows_preflight_page_offering_stop()
+    {
+        Assert.Equal(S.PreflightFailed, InstallerPlan.Next(HeldByBpp));
+        Assert.True(InstallerPlan.CanStopBpp(HeldByBpp));
+    }
+
+    [Fact]
+    public void Stop_bpp_is_not_offered_for_other_preflight_failures()
+        => Assert.False(InstallerPlan.CanStopBpp(After(S.Preflight) with { PreflightOk = false }));
+
+    [Fact]
+    public void Stop_bpp_stops_then_reruns_preflight()
+    {
+        var s = InstallerPlan.StopBpp(HeldByBpp);
+        Assert.Equal(S.StopRunningBpp, InstallerPlan.Next(s));
+        Assert.False(InstallerPlan.IsFinal(S.StopRunningBpp));
+        s = s with { Completed = S.StopRunningBpp, StopBppAttempted = true };
+        Assert.Equal(S.Preflight, InstallerPlan.Next(s));
+        Assert.Equal(S.ExtractTray, InstallerPlan.Next(s with { Completed = S.Preflight, PreflightOk = true }));
+    }
+
+    [Fact]
+    public void Stop_bpp_is_offered_once_then_the_failure_is_final()
+    {
+        var s = InstallerPlan.StopBpp(HeldByBpp) with { Completed = S.StopRunningBpp, StopBppAttempted = true };
+        s = s with { Completed = S.Preflight, PreflightOk = false, PortHeldByBpp = true };
+        Assert.Equal(S.PreflightFailed, InstallerPlan.Next(s));
+        Assert.False(InstallerPlan.CanStopBpp(s));
+        Assert.Throws<InvalidOperationException>(() => InstallerPlan.StopBpp(s));
+    }
+
+    [Fact]
+    public void Stop_bpp_outside_the_preflight_page_is_rejected()
+        => Assert.Throws<InvalidOperationException>(() => InstallerPlan.StopBpp(After(S.StopDistro) with
+        {
+            Init = InitOutcome.Failed, PortHeldByBpp = true,
+        }));
+
     // ---- 3. WSL ----
 
     [Fact]

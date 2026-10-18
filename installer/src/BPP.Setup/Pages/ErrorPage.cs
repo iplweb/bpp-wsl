@@ -1,9 +1,13 @@
 namespace BPP.Setup.Pages;
 
-/// <summary>Title, problem list, collapsible log, optional "Spróbuj ponownie", "Zamknij".</summary>
+/// <summary>An extra button on the error page (e.g. "Zatrzymaj BPP").</summary>
+internal sealed record ErrorAction(string Text, Action Run);
+
+/// <summary>Title, problem list, collapsible log, optional "Spróbuj ponownie" or other action, "Zamknij".</summary>
 internal sealed class ErrorPage : Page
 {
-    public ErrorPage(string title, IReadOnlyList<string> problems, string log, Action? retry, Action close)
+    public ErrorPage(string title, IReadOnlyList<string> problems, string log, Action? retry, Action close,
+        ErrorAction? extra = null)
     {
         AddRow(Title(title));
         // the problem list takes the free height and scrolls, so long messages never push the buttons off
@@ -34,6 +38,7 @@ internal sealed class ErrorPage : Page
 
         var buttons = new List<Button> { Action("Zamknij", close) };
         if (retry != null) buttons.Add(Action("Spróbuj ponownie", retry));
+        if (extra != null) buttons.Add(Action(extra.Text, extra.Run));
         AddButtons(buttons.ToArray());
     }
 }
