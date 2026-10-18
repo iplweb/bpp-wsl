@@ -84,6 +84,9 @@ public static class InstallerPlan
             : s.StopBppRequested && !s.StopBppAttempted ? InstallerStep.StopRunningBpp : InstallerStep.PreflightFailed,
         InstallerStep.StopRunningBpp => InstallerStep.Preflight,
         // Right after BPP.exe exists, so a partial or cancelled install can be removed from Settings.
+        // ExtractTray and RegisterUninstall deliberately precede AskReinstall: declining a reinstall then leaves
+        // the new BPP.exe (and its Apps entry) next to the old distro, which is harmless — the new tray drives the
+        // old distro the same way and the uninstaller removes both.
         InstallerStep.ExtractTray => InstallerStep.RegisterUninstall,
         InstallerStep.RegisterUninstall => InstallerStep.CheckWsl,
         InstallerStep.CheckWsl => s.WslReady ? InstallerStep.CheckDistro : WslMissing(s),
