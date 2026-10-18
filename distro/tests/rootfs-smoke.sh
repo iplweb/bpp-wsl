@@ -22,5 +22,6 @@ docker run --rm --privileged --platform linux/amd64 "$img" bash -c '
   test "$(cat /opt/bpp/image-tag)" = TESTTAG
   test -x /opt/bpp/bin/bpp-ctl
   test ! -e /opt/bpp/state
+  test -f /etc/machine-id && test ! -s /etc/machine-id
   echo "rootfs smoke OK"
 '

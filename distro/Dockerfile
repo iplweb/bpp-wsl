@@ -25,4 +25,6 @@ COPY rootfs/ /
 RUN chmod 0755 /opt/bpp/bin/* \
  && chmod a+r /opt/bpp/lib/*.sh \
  && echo "$BPP_IMAGE_TAG" > /opt/bpp/image-tag \
- && ln -s /opt/bpp/bin/bpp-ctl /usr/local/bin/bpp-ctl
+ && ln -s /opt/bpp/bin/bpp-ctl /usr/local/bin/bpp-ctl \
+ && : > /etc/machine-id \
+ && rm -f /var/lib/dbus/machine-id
