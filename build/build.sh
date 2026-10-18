@@ -13,6 +13,20 @@ if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
   echo "Nieprawidlowa wersja: $version" >&2
   exit 2
 fi
+# Wersja numeryczna dla -p:Version (AssemblyVersion -> wersja w instalatorze i w "Aplikacje"):
+# czesc przed pierwszym '-'/'+', postaci N.N.N[.N], kazda liczba <= 65535.
+numeric_version="${version%%[-+]*}"
+if [[ ! "$numeric_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "Wersja musi zaczynac sie od N.N.N[.N] (np. 0.1.0 lub 0.1.0-rc1): $version" >&2
+  exit 2
+fi
+IFS=. read -r -a _parts <<<"$numeric_version"
+for _p in "${_parts[@]}"; do
+  if ((10#$_p > 65535)); then
+    echo "Skladnik wersji wiekszy niz 65535: $version" >&2
+    exit 2
+  fi
+done
 
 case "${BPP_SIGN:-}" in
   1|true|yes) sign=1 ;;
@@ -29,7 +43,7 @@ fi
 
 publish=(-c Release -r win-x64 --self-contained
   -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true
-  -p:EnableWindowsTargeting=true)
+  -p:EnableWindowsTargeting=true -p:Version="$numeric_version")
 
 echo "==> 1/4 rootfs (tag obrazow: $tag)"
 "$repo/build/build-rootfs.sh" "$tag"

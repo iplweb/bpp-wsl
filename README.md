@@ -34,6 +34,10 @@ build/build.sh <BPP_IMAGE_TAG> <wersja>
 build/build.sh 202609.1402 0.1.0      # -> dist/BPP-Setup-0.1.0.exe
 ```
 
+Wersja ma postać `N.N.N[.N]`, opcjonalnie z sufiksem (`0.1.0-rc1`); część
+numeryczna trafia do `-p:Version` obu programów, więc instalator i wpis
+w „Aplikacje” pokazują właściwą wersję.
+
 Skrypt: (1) buduje rootfs dystrybucji, (2) publikuje `BPP.exe` i
 `BPP-Setup.exe` (`win-x64`, samodzielne, jeden plik, kompresja),
 (3) dokleja do `BPP-Setup.exe` ładunek (`rootfs`, `BPP.exe`) narzędziem
