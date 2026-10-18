@@ -14,6 +14,12 @@ if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
   exit 2
 fi
 
+case "${BPP_SIGN:-}" in
+  1|true|yes) sign=1 ;;
+  ""|0|false|no) sign=0 ;;
+  *) echo "Nieprawidlowa wartosc BPP_SIGN='$BPP_SIGN' (dozwolone: 1/true/yes lub puste/0/false/no)." >&2; exit 2 ;;
+esac
+
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dist="$repo/dist"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1
@@ -40,12 +46,12 @@ dotnet run -c Release --project "$repo/installer/src/BPP.Pack" -- \
   "rootfs=$dist/bpp-rootfs.tar.gz" "BPP.exe=$dist/tray/BPP.exe"
 
 echo "==> 4/4 podpis"
-if [[ "${BPP_SIGN:-0}" == 1 ]]; then
+if [[ $sign == 1 ]]; then
   "$repo/build/sign.sh" "$out"
 else
   echo "Podpis pominiety (ustaw BPP_SIGN=1 i zmienne BPP_SIGN_*, aby podpisac)."
 fi
 
 echo "$out"
-if size="$(stat -f %z "$out" 2>/dev/null)"; then :; else size="$(stat -c %s "$out")"; fi
+size="$(wc -c < "$out" | tr -d ' ')"
 echo "Rozmiar: $size B"

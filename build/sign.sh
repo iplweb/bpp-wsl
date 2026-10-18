@@ -51,7 +51,11 @@ if [[ ! -f "$jar" ]]; then
     "https://github.com/ebourg/jsign/releases/download/$JSIGN_VERSION/jsign-$JSIGN_VERSION.jar"
   mv "$jar.part" "$jar"
 fi
-actual="$(shasum -a 256 "$jar" | cut -d' ' -f1)"
+if command -v sha256sum >/dev/null; then
+  actual="$(sha256sum "$jar" | cut -d' ' -f1)"
+else
+  actual="$(shasum -a 256 "$jar" | cut -d' ' -f1)"
+fi
 if [[ "$actual" != "$JSIGN_SHA256" ]]; then
   echo "Blad: jsign-$JSIGN_VERSION.jar ma zla sume SHA-256 ($actual)" >&2
   rm -f "$jar"
