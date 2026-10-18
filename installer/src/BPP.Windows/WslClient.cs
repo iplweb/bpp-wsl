@@ -22,9 +22,17 @@ public sealed class WslClient
         return r is { ExitCode: 0 };
     }
 
-    public async Task<bool> DistroExistsAsync()
+    public Task<bool> DistroExistsAsync() => ListedAsync("-l", "-q");
+
+    /// <summary>
+    /// Whether the BPP distro is running, without starting it (<c>wsl -l --running -q</c>; with nothing running
+    /// wsl exits non-zero, which also reads as "not running").
+    /// </summary>
+    public Task<bool> IsDistroRunningAsync() => ListedAsync("-l", "--running", "-q");
+
+    private static async Task<bool> ListedAsync(params string[] args)
     {
-        var r = await TryRunWslAsync("-l", "-q").ConfigureAwait(false);
+        var r = await TryRunWslAsync(args).ConfigureAwait(false);
         if (r is not { ExitCode: 0 }) return false;
         return r.StdOut.Split('\n')
             .Any(l => string.Equals(l.Trim(), AppPaths.DistroName, StringComparison.OrdinalIgnoreCase));

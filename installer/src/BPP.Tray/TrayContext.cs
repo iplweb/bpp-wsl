@@ -48,7 +48,9 @@ internal sealed class TrayContext : ApplicationContext
     private IReadOnlyList<string>? _startedHosts;
     private LogsForm? _logsForm;
 
-    /// <summary>Set when the user uninstalled from the tray; Program removes the program dir after exit.</summary>
+    /// <summary>
+    /// Set when the user uninstalled from the tray and the distro is gone; Program removes the program dir after exit.
+    /// </summary>
     public bool ProgramDirRemovalRequested { get; private set; }
 
     public TrayContext()
@@ -296,8 +298,9 @@ internal sealed class TrayContext : ApplicationContext
 
         try
         {
-            await Uninstaller.RunWithProgressAsync();
-            ProgramDirRemovalRequested = true;
+            var report = await Uninstaller.RunWithProgressAsync();
+            // the distro is still there: keep everything (also BPP.exe) so the uninstall can be retried
+            ProgramDirRemovalRequested = report.Cleanup.RemoveProgramDir;
         }
         catch (Exception ex)
         {

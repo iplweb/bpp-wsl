@@ -1,12 +1,17 @@
 using System.Diagnostics;
+using BPP.Core;
 using BPP.Windows;
 
 namespace BPP.Tray;
 
+/// <summary>Outcome of an uninstall: what <see cref="UninstallPlan"/> allowed to remove, and what went wrong.</summary>
+internal sealed record UninstallReport(UninstallCleanup Cleanup, IReadOnlyList<string> Problems);
+
 /// <summary>
-/// <c>--uninstall</c>, as the ordinary user: stops and unregisters the distro, removes per-user files and
-/// registration, asks UAC once to remove the firewall rule, then deletes the program directory after exit.
-/// Every step is independent and tolerates a partial install; failures are collected and shown at the end.
+/// <c>--uninstall</c>, as the ordinary user: stops a running stack and unregisters the distro; only once the distro
+/// is really gone (<see cref="UninstallPlan"/>) removes per-user files and registration, asks UAC once to remove the
+/// firewall rule, then deletes the program directory after exit. If the distro is still there, nothing else is
+/// touched and the user is asked to retry. Cleanup steps tolerate a partial install; failures are shown at the end.
 /// </summary>
 internal static class Uninstaller
 {
@@ -20,18 +25,19 @@ internal static class Uninstaller
 
         SynchronizationContext.SetSynchronizationContext(new WindowsFormsSynchronizationContext());
         using var context = new ApplicationContext();
-        int? code = null;
+        UninstallReport? report = null;
         _ = RunAndExitAsync();
         Application.Run(context);
-        if (code == null) return 1; // unexpected failure: keep the program so the user can retry
+        // unexpected failure or the distro is still there: keep the program so the user can retry
+        if (report is not { Cleanup.RemoveProgramDir: true }) return 1;
         ScheduleProgramDirRemoval();
-        return code.Value;
+        return report.Problems.Count == 0 ? 0 : 1;
 
         async Task RunAndExitAsync()
         {
             try
             {
-                code = await RunWithProgressAsync() ? 0 : 1;
+                report = await RunWithProgressAsync();
             }
             catch (Exception ex)
             {
@@ -51,61 +57,100 @@ internal static class Uninstaller
             Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
            == DialogResult.Yes;
 
-    /// <summary>Shows a progress window, uninstalls, then shows the summary. True when nothing failed.</summary>
-    public static async Task<bool> RunWithProgressAsync()
+    /// <summary>
+    /// Shows a progress window, uninstalls, then shows the summary. The caller removes the program directory only
+    /// when <see cref="UninstallCleanup.RemoveProgramDir"/> is set.
+    /// </summary>
+    public static async Task<UninstallReport> RunWithProgressAsync()
     {
-        List<string> problems;
+        UninstallReport report;
         using (var progress = CreateProgressForm())
         {
             progress.Show();
-            problems = await UninstallAsync();
+            report = await UninstallAsync();
             progress.Close();
         }
 
-        if (problems.Count == 0)
+        if (!report.Cleanup.RemoveProgramDir)
+        {
+            MessageBox.Show("Nie udało się odinstalować BPP:\n\n• " + string.Join("\n• ", report.Problems) +
+                            "\n\nProgram, dane i skróty pozostały bez zmian. Spróbuj ponownie odinstalować " +
+                            "(Ustawienia → Aplikacje → BPP albo menu ikonki BPP → Odinstaluj), w razie potrzeby " +
+                            "po ponownym uruchomieniu komputera.",
+                Caption, MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        else if (report.Problems.Count == 0)
         {
             MessageBox.Show("BPP zostało odinstalowane.", Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return true;
         }
-        MessageBox.Show("BPP zostało odinstalowane, ale nie wszystko się udało:\n\n• " + string.Join("\n• ", problems),
-            Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        return false;
+        else
+        {
+            MessageBox.Show("BPP zostało odinstalowane, ale nie wszystko się udało:\n\n• " +
+                            string.Join("\n• ", report.Problems),
+                Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        return report;
     }
 
-    private static async Task<List<string>> UninstallAsync()
+    private static async Task<UninstallReport> UninstallAsync()
     {
         var problems = new List<string>();
 
         await Task.Run(StopOtherInstances);
 
         var wsl = new WslClient();
-        if (await wsl.DistroExistsAsync())
+        var existed = await wsl.DistroExistsAsync();
+        var unregistered = false;
+        if (existed)
         {
-            using (var timeout = new CancellationTokenSource(StopTimeout))
+            if (UninstallPlan.ShouldStopBeforeUnregister(existed, await wsl.IsDistroRunningAsync()))
             {
+                using var timeout = new CancellationTokenSource(StopTimeout);
                 try { await wsl.RunCtlTextAsync("stop", timeout.Token); }
                 catch (Exception) { /* the distro is being removed anyway */ }
             }
 
-            try { await wsl.UnregisterAsync(); }
+            try
+            {
+                await wsl.UnregisterAsync();
+                unregistered = true;
+            }
             catch (Exception ex) { problems.Add("Nie udało się usunąć dystrybucji WSL „BPP”: " + ex.Message); }
         }
 
-        var dataDir = Path.GetDirectoryName(AppPaths.DistroDir)!; // %LOCALAPPDATA%\BPP
-        try
+        var listed = existed && await wsl.DistroExistsAsync();
+        if (unregistered && listed) problems.Add("Dystrybucja WSL „BPP” nadal jest zarejestrowana.");
+        // the distro still registered: its VHD, the Apps entry and BPP.exe must stay so the uninstall can be retried
+        var cleanup = UninstallPlan.AfterUnregister(UninstallPlan.DistroGone(existed, unregistered, listed));
+
+        if (cleanup.RemoveData)
         {
-            if (Directory.Exists(dataDir)) await Task.Run(() => Directory.Delete(dataDir, recursive: true));
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            problems.Add($"Nie udało się usunąć katalogu {dataDir}: {ex.Message}");
+            var dataDir = Path.GetDirectoryName(AppPaths.DistroDir)!; // %LOCALAPPDATA%\BPP
+            try
+            {
+                if (Directory.Exists(dataDir)) await Task.Run(() => Directory.Delete(dataDir, recursive: true));
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                problems.Add($"Nie udało się usunąć katalogu {dataDir}: {ex.Message}");
+            }
         }
 
-        var registration = new Registration();
-        Step(problems, "skrótu w Menu Start", registration.RemoveStartMenuShortcut);
-        Step(problems, "wpisu w „Aplikacje”", registration.UnregisterUninstall);
-        Step(problems, "wpisu RunOnce", registration.ClearRunOnce);
+        if (cleanup.RemoveRegistration)
+        {
+            var registration = new Registration();
+            Step(problems, "skrótu w Menu Start", registration.RemoveStartMenuShortcut);
+            Step(problems, "wpisu w „Aplikacje”", registration.UnregisterUninstall);
+            Step(problems, "wpisu RunOnce", registration.ClearRunOnce);
+        }
 
+        if (cleanup.RemoveFirewallRule) await RemoveFirewallRuleAsync(problems);
+
+        return new UninstallReport(cleanup, problems);
+    }
+
+    private static async Task RemoveFirewallRuleAsync(List<string> problems)
+    {
         try
         {
             // RemoveElevated checks RuleExists unelevated first and prompts only when the rule is there
@@ -120,8 +165,6 @@ internal static class Uninstaller
         {
             problems.Add($"Nie udało się usunąć reguły zapory „{AppPaths.FirewallRuleName}”: {ex.Message}");
         }
-
-        return problems;
     }
 
     private static void Step(List<string> problems, string what, Action action)
