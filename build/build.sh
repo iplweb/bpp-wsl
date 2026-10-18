@@ -14,10 +14,10 @@ if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._-]*$ ]]; then
   exit 2
 fi
 # Wersja numeryczna dla -p:Version (AssemblyVersion -> wersja w instalatorze i w "Aplikacje"):
-# czesc przed pierwszym '-'/'+', postaci N.N.N[.N], kazda liczba <= 65535.
+# czesc przed pierwszym '-'/'+', postaci N.N.N (InstallerFlow pokazuje 3 skladniki), kazda liczba <= 65535.
 numeric_version="${version%%[-+]*}"
-if [[ ! "$numeric_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]]; then
-  echo "Wersja musi zaczynac sie od N.N.N[.N] (np. 0.1.0 lub 0.1.0-rc1): $version" >&2
+if [[ ! "$numeric_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Wersja musi miec postac N.N.N z opcjonalnym sufiksem (np. 0.1.0 lub 0.1.0-rc1): $version" >&2
   exit 2
 fi
 IFS=. read -r -a _parts <<<"$numeric_version"
