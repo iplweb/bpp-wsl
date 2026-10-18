@@ -1,0 +1,85 @@
+name: release
+
+# Buduje dist/BPP-Setup-<wersja>.exe na Linuksie i publikuje go w GitHub Releases.
+# - push tagu v<wersja> (np. v0.1.1): wersja z tagu, tag obrazow ze zmiennej repo BPP_IMAGE_TAG,
+# - recznie (Actions -> release -> Run workflow): wersja i opcjonalnie tag obrazow z formularza.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Wersja instalatora (N.N.N, opcjonalnie z sufiksem, np. 0.1.1 lub 0.2.0-rc1)"
+        required: true
+      image_tag:
+        description: "Tag obrazow iplweb/bpp_* (puste = zmienna repo BPP_IMAGE_TAG)"
+        required: false
+      draft:
+        description: "Szkic zamiast publikacji (do testow workflow)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}-${{ inputs.version }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
+      IMAGE_TAG: ${{ inputs.image_tag || vars.BPP_IMAGE_TAG }}
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          global-json-file: installer/global.json
+
+      - name: Parametry
+        run: |
+          VERSION="${VERSION#v}"
+          if [[ -z "$IMAGE_TAG" ]]; then
+            echo "::error::Brak tagu obrazow: ustaw zmienna repo BPP_IMAGE_TAG albo podaj image_tag." >&2
+            exit 1
+          fi
+          if [[ ! "$IMAGE_TAG" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+            echo "::error::Nieprawidlowy tag obrazow: $IMAGE_TAG" >&2
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Wersja: $VERSION, obrazy: $IMAGE_TAG"
+
+      - name: Testy jednostkowe
+        run: dotnet test installer -c Release
+
+      - name: Testy dystrybucji (bats)
+        run: build/test-distro.sh
+
+      - name: Build
+        run: build/build.sh "$IMAGE_TAG" "$VERSION"
+
+      - name: Kontrola ladunku i suma SHA-256
+        run: |
+          dotnet run -c Release --project installer/src/BPP.Pack -- --list "dist/BPP-Setup-$VERSION.exe"
+          (cd dist && sha256sum "BPP-Setup-$VERSION.exe" > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+      - name: Publikacja w Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRAFT: ${{ inputs.draft && '--draft' || '' }}
+        run: |
+          tag="v$VERSION"
+          files=("dist/BPP-Setup-$VERSION.exe" dist/SHA256SUMS.txt)
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${files[@]}" --clobber
+          else
+            notes="$(printf 'Instalator BPP dla Windows %s (obrazy BPP `%s`).\n\nPobierz `BPP-Setup-%s.exe` ponizej i uruchom dwuklikiem — instrukcja: [README](https://github.com/%s#instalacja-krok-po-kroku).\n\nPlik nie jest podpisany: Windows SmartScreen pokaze ostrzezenie (Wiecej informacji -> Uruchom mimo to).\n\n```\n%s\n```\n' \
+              "$VERSION" "$IMAGE_TAG" "$VERSION" "$GITHUB_REPOSITORY" "$(cat dist/SHA256SUMS.txt)")"
+            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease $DRAFT \
+              --title "BPP dla Windows $VERSION (testowe)" --notes "$notes"
+          fi

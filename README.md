@@ -167,11 +167,17 @@ Podpisać można też gotowy plik ręcznie: `build/sign.sh dist/BPP-Setup-0.1.0.
 
 ## Publikacja wydania
 
+Wydania buduje GitHub Actions (`.github/workflows/release.yml`, runner
+`ubuntu-latest`): testy, `build/build.sh`, potem `BPP-Setup-<wersja>.exe`
+i `SHA256SUMS.txt` trafiają do Releases jako *pre-release*.
+
 ```bash
-build/build.sh <BPP_IMAGE_TAG> <wersja>
-git tag v<wersja> && git push origin v<wersja>
-gh release create v<wersja> dist/BPP-Setup-<wersja>.exe --prerelease
+git tag v0.1.1 && git push origin v0.1.1      # tag obrazów ze zmiennej repo BPP_IMAGE_TAG
+gh variable set BPP_IMAGE_TAG --body 202609.1402   # zmiana tagu obrazów BPP
 ```
+
+Albo ręcznie: **Actions → release → Run workflow** (wersja, opcjonalnie tag
+obrazów, opcja „szkic” do testów).
 
 ## Uwagi bezpieczeństwa
 
@@ -201,6 +207,6 @@ gh release create v<wersja> dist/BPP-Setup-<wersja>.exe --prerelease
 `.github/workflows/build.yml` (runner `windows-latest`, przy każdym pushu
 i PR): `dotnet test`, `dotnet build -c Release`, publish `BPP.exe` i smoke —
 `BPP.exe --bogus` musi zakończyć się kodem 2 bez UI. Dystrybucja Linuksa nie
-jest budowana w CI — buduje ją `build/build.sh` lokalnie.
+jest budowana w tym workflow — robi to `release.yml` (wyżej).
 
 Lista kontrolna ręcznego testu na Windowsie: [docs/windows-checklist.md](docs/windows-checklist.md).
