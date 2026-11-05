@@ -12,9 +12,7 @@ internal sealed class SetupForm : Form
     public const string BppUrl = "https://localhost:8443/";
     private const string ProjectUrl = "https://bpp.iplweb.pl/";
     private const string Caption = "Instalator BPP";
-    private const string NoPayload = "Brak danych instalacyjnych w pliku — użyj pełnego instalatora.";
-
-    private readonly bool _resume;
+    private readonly AppArgs _args;
     private readonly Icon _icon;
     private readonly Image _logo;
     private readonly Image _iplwebLogo;
@@ -28,9 +26,9 @@ internal sealed class SetupForm : Form
     private int _baseHeight;
     private bool _launchTray;
 
-    public SetupForm(bool resume)
+    public SetupForm(AppArgs args)
     {
-        _resume = resume;
+        _args = args;
         var asm = typeof(SetupForm).Assembly;
         using (var s = asm.GetManifestResourceStream("BPP.Setup.bpp.ico")
                        ?? throw new InvalidOperationException("Brak zasobu bpp.ico."))
@@ -124,29 +122,16 @@ internal sealed class SetupForm : Form
     private void OnShown(object? sender, EventArgs e)
     {
         var exe = Environment.ProcessPath;
-        var payload = exe == null ? null : TryReadPayload(exe);
-        if (exe == null || payload == null)
+        if (exe == null)
         {
-            ShowError("Nie można zainstalować BPP", new[] { NoPayload }, canRetry: false);
+            ShowError("Nie można zainstalować BPP", new[] { "Nie można ustalić ścieżki programu instalatora." },
+                canRetry: false);
             return;
         }
 
-        _flow = new InstallerFlow(this, exe, payload);
-        if (_resume) Install();
+        _flow = new InstallerFlow(this, exe, _args);
+        if (_args.Resume) Install();
         else ShowPage(new WelcomePage(Install, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
-    }
-
-    private static IReadOnlyDictionary<string, PayloadEntry>? TryReadPayload(string exe)
-    {
-        try
-        {
-            var index = PayloadArchive.ReadIndex(exe);
-            return index.ContainsKey(InstallerFlow.RootfsEntry) && index.ContainsKey(InstallerFlow.TrayEntry) ? index : null;
-        }
-        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException)
-        {
-            return null;
-        }
     }
 
     private void Install() => RunFlow(f => f.RunAsync());
@@ -154,6 +139,16 @@ internal sealed class SetupForm : Form
     private void Retry() => RunFlow(f => f.RetryAsync());
 
     private void StopBpp() => RunFlow(f => f.StopBppAsync());
+
+    private void InstallAnyway()
+    {
+        if (MessageBox.Show(this,
+                "Ten komputer nie spełnia zalecanych wymagań BPP. Instalacja może się nie udać, a BPP może działać " +
+                "wolno albo zatrzymać się, gdy zabraknie pamięci lub miejsca na dysku.\n\nZainstalować mimo to?",
+                Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+            == DialogResult.Yes)
+            RunFlow(f => f.InstallAnywayAsync());
+    }
 
     /// <summary>The flow never throws (it shows the Error page); closes the window if that was requested meanwhile.</summary>
     private async void RunFlow(Func<InstallerFlow, Task> run)
@@ -182,10 +177,15 @@ internal sealed class SetupForm : Form
     }
 
     /// <param name="canStopBpp">Offer "Zatrzymaj BPP" (port 8443 held by a running BPP distro).</param>
-    public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry, bool canStopBpp = false)
+    /// <param name="canInstallAnyway">Offer "Zainstaluj mimo to" (only too little RAM / disk).</param>
+    public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry, bool canStopBpp = false,
+        bool canInstallAnyway = false)
     {
+        var extra = canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp)
+            : canInstallAnyway ? new ErrorAction("Zainstaluj mimo to", InstallAnyway)
+            : null;
         ShowPage(new ErrorPage(title, problems, ShowLogs, () => SendDiagnostics(this), canRetry ? Retry : null, Close,
-            canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp) : null));
+            extra));
     }
 
     private string LogText()

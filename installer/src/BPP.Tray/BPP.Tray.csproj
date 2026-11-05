@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="..\BPP.Core\BPP.Core.csproj" />
     <ProjectReference Include="..\BPP.Windows\BPP.Windows.csproj" />
+    <ProjectReference Include="..\BPP.Setup\BPP.Setup.csproj" />
   </ItemGroup>
 
 </Project>

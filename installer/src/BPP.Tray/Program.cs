@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using BPP.Core;
+using BPP.Setup;
 using BPP.Windows;
 
 namespace BPP.Tray;
@@ -12,14 +14,20 @@ internal static class Program
     private static int Main(string[] args)
     {
         // BPP.exe is never elevated (Ruling R8): UAC runs only System32 dism.exe / netsh.exe.
-        // "--uninstall" is dispatched before the single-instance mutex: Settings launches it while the tray runs.
-        if (args.Length > 0 && args is not ["--uninstall"] and not ["--tray"])
-            return 2;
+        // One exe for the tray and the installer: the mini BPP-Setup.exe downloads it and runs "--setup".
+        // "--uninstall" and "--setup" are dispatched before the tray's single-instance mutex.
+        var parsed = AppArgs.Parse(args);
+        if (parsed == null) return 2;
 
         ApplicationConfiguration.Initialize();
 
-        if (args is ["--uninstall"])
-            return Uninstaller.RunStandalone();
+        switch (parsed.Mode)
+        {
+            case AppMode.Uninstall:
+                return Uninstaller.RunStandalone();
+            case AppMode.Setup:
+                return SetupEntry.Run(parsed);
+        }
 
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
         if (!createdNew)

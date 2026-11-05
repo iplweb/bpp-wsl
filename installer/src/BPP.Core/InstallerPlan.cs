@@ -5,12 +5,13 @@ public enum InstallerStep
 {
     // actions
     Preflight,
-    ExtractTray,
+    InstallProgram,
     RegisterUninstall,
     CheckWsl,
     EnableWsl,
     InstallWslPackage,
     ScheduleResume,
+    DownloadRootfs,
     CheckDistro,
     AskReinstall,
     Unregister,
@@ -25,6 +26,7 @@ public enum InstallerStep
     Done,
     RestartRequired,
     PreflightFailed,
+    DownloadFailed,
     WslNeedsAdmin,
     WslEnableFailed,
     WslUnavailable,
@@ -47,6 +49,12 @@ public sealed record InstallerState
 {
     public InstallerStep? Completed { get; init; }
     public bool PreflightOk { get; init; }
+
+    /// <summary>Every preflight problem is soft (<see cref="Preflight.OnlySoft"/>): "Zainstaluj mimo to" is possible.</summary>
+    public bool PreflightSoftOnly { get; init; }
+
+    /// <summary>The user chose "Zainstaluj mimo to" (or <c>--install-anyway</c> after a restart).</summary>
+    public bool InstallAnyway { get; init; }
     public bool WslReady { get; init; }
 
     /// <summary>Unelevated <c>IsWslFeatureEnabled</c> heuristic: only a hint (Task 10 ruling).</summary>
@@ -54,6 +62,9 @@ public sealed record InstallerState
 
     public EnableWslOutcome EnableWsl { get; init; }
     public bool WslPackageInstallAttempted { get; init; }
+    /// <summary>The verified rootfs archive is on disk (downloaded, cached or given with <c>--rootfs</c>).</summary>
+    public bool RootfsReady { get; init; }
+
     public bool DistroExists { get; init; }
     public bool ReinstallConfirmed { get; init; }
     public bool ImportOk { get; init; }
@@ -80,16 +91,20 @@ public static class InstallerPlan
     public static InstallerStep Next(InstallerState s) => s.Completed switch
     {
         null => InstallerStep.Preflight,
-        InstallerStep.Preflight => s.PreflightOk ? InstallerStep.ExtractTray
+        InstallerStep.Preflight => s.PreflightOk || (s.InstallAnyway && s.PreflightSoftOnly) ? InstallerStep.InstallProgram
             : s.StopBppRequested && !s.StopBppAttempted ? InstallerStep.StopRunningBpp : InstallerStep.PreflightFailed,
         InstallerStep.StopRunningBpp => InstallerStep.Preflight,
         // Right after BPP.exe exists, so a partial or cancelled install can be removed from Settings.
-        // ExtractTray and RegisterUninstall deliberately precede AskReinstall: declining a reinstall then leaves
+        // InstallProgram and RegisterUninstall deliberately precede AskReinstall: declining a reinstall then leaves
         // the new BPP.exe (and its Apps entry) next to the old distro, which is harmless — the new tray drives the
         // old distro the same way and the uninstaller removes both.
-        InstallerStep.ExtractTray => InstallerStep.RegisterUninstall,
+        InstallerStep.InstallProgram => InstallerStep.RegisterUninstall,
         InstallerStep.RegisterUninstall => InstallerStep.CheckWsl,
-        InstallerStep.CheckWsl => s.WslReady ? InstallerStep.CheckDistro : WslMissing(s),
+        // The rootfs is fetched once WSL works (no point downloading it for a machine that cannot run it) and
+        // before AskReinstall/Unregister, so a failed download never leaves the user without the old distro.
+        // DownloadRootfs is idempotent: after the import-failure loop it only re-verifies the cached file.
+        InstallerStep.CheckWsl => s.WslReady ? InstallerStep.DownloadRootfs : WslMissing(s),
+        InstallerStep.DownloadRootfs => s.RootfsReady ? InstallerStep.CheckDistro : InstallerStep.DownloadFailed,
         InstallerStep.EnableWsl => s.EnableWsl switch
         {
             EnableWslOutcome.Ok => InstallerStep.InstallWslPackage,
@@ -133,15 +148,31 @@ public static class InstallerPlan
     /// <summary>True for steps that are final pages (shown, not executed).</summary>
     public static bool IsFinal(InstallerStep step) => step >= InstallerStep.Done;
 
-    /// <summary>Only a failed <c>bpp-ctl init</c> can be retried (init is idempotent on the Linux side).</summary>
-    public static bool CanRetry(InstallerStep step) => step == InstallerStep.InitFailed;
+    /// <summary>
+    /// A failed <c>bpp-ctl init</c> (idempotent on the Linux side) and a failed rootfs download (resumed from the
+    /// partial file) can be retried.
+    /// </summary>
+    public static bool CanRetry(InstallerStep step) => step is InstallerStep.InitFailed or InstallerStep.DownloadFailed;
 
-    /// <summary>State that makes <see cref="Next"/> run <see cref="InstallerStep.RunInit"/> again.</summary>
-    public static InstallerState Retry(InstallerState s)
+    /// <summary>State that makes <see cref="Next"/> run the failed step (init or the download) again.</summary>
+    public static InstallerState Retry(InstallerState s) => Next(s) switch
     {
-        if (!CanRetry(Next(s)))
-            throw new InvalidOperationException("Ponowić można tylko nieudany krok konfiguracji (bpp-ctl init).");
-        return s with { Init = InitOutcome.NotRun, Completed = InstallerStep.RunInit };
+        InstallerStep.InitFailed => s with { Init = InitOutcome.NotRun, Completed = InstallerStep.RunInit },
+        InstallerStep.DownloadFailed => s with { RootfsReady = false, Completed = InstallerStep.CheckWsl },
+        _ => throw new InvalidOperationException(
+            "Ponowić można tylko nieudane pobieranie dystrybucji albo nieudaną konfigurację (bpp-ctl init)."),
+    };
+
+    /// <summary>The PreflightFailed page offers "Zainstaluj mimo to": only RAM / disk problems, not chosen yet.</summary>
+    public static bool CanInstallAnyway(InstallerState s)
+        => Next(s) == InstallerStep.PreflightFailed && s.PreflightSoftOnly && !s.InstallAnyway;
+
+    /// <summary>State that makes <see cref="Next"/> continue past the soft preflight problems.</summary>
+    public static InstallerState InstallAnywayFrom(InstallerState s)
+    {
+        if (!CanInstallAnyway(s))
+            throw new InvalidOperationException("Zainstalować mimo to można tylko przy za małej ilości RAM lub miejsca.");
+        return s with { InstallAnyway = true };
     }
 
     /// <summary>The PreflightFailed page offers "Zatrzymaj BPP": port held by a running BPP distro, not tried yet.</summary>

@@ -23,4 +23,7 @@ public static class AppPaths
     public static string ProgramDir => Path.Combine(LocalAppData, "Programs", "BPP");
     public static string TrayExe => Path.Combine(ProgramDir, "BPP.exe");
     public static string DistroDir => Path.Combine(LocalAppData, "BPP", "wsl");
+
+    /// <summary>Downloads (the rootfs, the app fetched by the mini BPP-Setup.exe); removed with %LOCALAPPDATA%\BPP.</summary>
+    public static string DownloadDir => Path.Combine(LocalAppData, "BPP", "download");
 }

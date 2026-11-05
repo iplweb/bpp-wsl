@@ -40,10 +40,23 @@ przeszedł jeszcze pełnych testów na Windowsie — problemy zgłaszaj w
 
 **[⬇ Pobierz najnowszy `BPP-Setup.exe` z zakładki Releases](https://github.com/iplweb/bpp-wsl/releases/latest)**
 
+`BPP-Setup.exe` to mały plik (kilkadziesiąt KB). Resztę pobiera sam z tego
+samego wydania: program `BPP-<wersja>.exe` (~50 MB) i dystrybucję WSL
+`bpp-rootfs-<wersja>.tar.gz` (~170 MB). Sprawdza przy tym sumy kontrolne
+SHA-256 wbudowane w instalator.
+
+**Sieć blokuje GitHub?** Pobierz na innym komputerze wszystkie trzy pliki
+wydania (`BPP-Setup-…`, `BPP-…`, `bpp-rootfs-…`), połóż je w jednym folderze
+i uruchom `BPP-Setup-<wersja>.exe` z tego folderu. Instalator użyje plików
+z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
+
 ## Wymagania
 
 - Windows 10 22H2 lub Windows 11, **64-bitowy (x64)** — komputery ARM nie są obsługiwane,
-- **8 GB RAM** i **25 GB wolnego miejsca** na dysku,
+- **8 GB RAM** i **25 GB wolnego miejsca** na dysku. Przy mniejszej ilości
+  instalator pokaże ostrzeżenie z przyciskiem **Zainstaluj mimo to**. BPP
+  może wtedy działać wolno albo zatrzymać się, gdy zabraknie pamięci lub
+  miejsca,
 - internet (instalator pobiera ok. 2 GB) — bez serwera proxy,
 - wolny port **8443**,
 - hasło administratora **tylko wtedy**, gdy trzeba włączyć WSL albo otworzyć
@@ -163,22 +176,34 @@ brew install dotnet            # .NET SDK 10
 # Docker z możliwością budowania linux/amd64 (na Apple Silicon: emulacja)
 build/build.sh <BPP_IMAGE_TAG> <wersja>
 # np.
-build/build.sh 202609.1402 0.1.0      # -> dist/BPP-Setup-0.1.0.exe
+build/build.sh 202609.1402 0.1.0
+# -> dist/BPP-Setup-0.1.0.exe, dist/BPP-0.1.0.exe, dist/bpp-rootfs-0.1.0.tar.gz, dist/SHA256SUMS.txt
 ```
 
 Wersja ma postać `N.N.N`, opcjonalnie z sufiksem (`0.1.0-rc1`); część
 numeryczna trafia do `-p:Version` obu programów, więc instalator i wpis
 w „Aplikacje” pokazują właściwą wersję.
 
-Skrypt: (1) buduje rootfs dystrybucji, (2) publikuje `BPP.exe` i
-`BPP-Setup.exe` (`win-x64`, samodzielne, jeden plik, kompresja),
-(3) dokleja do `BPP-Setup.exe` ładunek (`rootfs`, `BPP.exe`) narzędziem
-`BPP.Pack`, (4) opcjonalnie podpisuje. Wypisuje ścieżkę i rozmiar wyniku.
-Zawartość ładunku sprawdzisz:
+Wydanie składa się z trzech plików, powiązanych łańcuchem sum SHA-256:
 
-```bash
-dotnet run --project installer/src/BPP.Pack -- --list dist/BPP-Setup-0.1.0.exe
-```
+| Plik | Co to jest |
+|---|---|
+| `BPP-Setup-<wersja>.exe` | mini instalator, .NET Framework 4.8 (wbudowany w Windows 10/11), kilkadziesiąt KB. Pobiera `BPP-<wersja>.exe`, sprawdza jego wkompilowaną sumę SHA-256 i uruchamia go z `--setup` |
+| `BPP-<wersja>.exe` | jeden program: tray **i** instalator (`--setup`), .NET 10, samodzielny, jeden plik. Ma wkompilowany adres i sumę rootfs. Pobiera rootfs po sprawdzeniu wymagań i działającego WSL, ze wznawianiem przerwanego pobierania |
+| `bpp-rootfs-<wersja>.tar.gz` | rootfs dystrybucji WSL (Debian + Docker) |
+
+Skrypt: (1) buduje rootfs, (2) publikuje `BPP.exe` z adresem
+`https://github.com/<BPP_GITHUB_REPO>/releases/download/v<wersja>/…` i sumą
+rootfs (i podpisuje go, jeśli włączone), (3) buduje mini instalator z adresem
+i sumą `BPP-<wersja>.exe` (i podpisuje), (4) zapisuje `SHA256SUMS.txt`.
+`BPP_GITHUB_REPO` domyślnie to `iplweb/bpp-wsl`. Wszystkie trzy pliki muszą
+trafić do wydania `v<wersja>` w tym repo, inaczej mini instalator nie ma skąd
+pobrać reszty.
+
+Test bez wydania na GitHubie: połóż obok siebie trzy pliki z `dist/` i
+uruchom `BPP-Setup-<wersja>.exe` (pliki obok mini instalatora mają
+pierwszeństwo przed pobieraniem). Sam program uruchomisz też bezpośrednio:
+`BPP-<wersja>.exe --setup --rootfs <plik.tar.gz>`.
 
 Jeśli `DOTNET_ROOT` nie jest ustawione, a istnieje
 `/opt/homebrew/opt/dotnet/libexec`, skrypt użyje go automatycznie.
@@ -209,9 +234,11 @@ patrz `docs/windows-checklist.md`.
 
 ## Podpisywanie kodu (opcjonalne)
 
-Domyślnie wyłączone. Włączenie podpisu `dist/BPP-Setup-<wersja>.exe` przez
-[jsign](https://github.com/ebourg/jsign) (uruchamiany w kontenerze, jar
-przypięty po wersji i SHA-256) — podpis następuje **po** doklejeniu ładunku:
+Domyślnie wyłączone. Włącza podpis `dist/BPP-<wersja>.exe` i
+`dist/BPP-Setup-<wersja>.exe` przez [jsign](https://github.com/ebourg/jsign)
+(uruchamiany w kontenerze, jar przypięty po wersji i SHA-256). `BPP.exe` jest
+podpisywany **przed** policzeniem jego sumy SHA-256, wkompilowanej w mini
+instalator:
 
 ```bash
 export BPP_SIGN=1
@@ -231,8 +258,10 @@ Podpisać można też gotowy plik ręcznie: `build/sign.sh dist/BPP-Setup-0.1.0.
 ## Publikacja wydania
 
 Wydania buduje GitHub Actions (`.github/workflows/release.yml`, runner
-`ubuntu-latest`): testy, `build/build.sh`, potem `BPP-Setup-<wersja>.exe`
-i `SHA256SUMS.txt` trafiają do Releases jako *pre-release*.
+`ubuntu-latest`): testy, `build/build.sh`, potem trzy pliki wydania
+i `SHA256SUMS.txt` trafiają do Releases jako *pre-release*. Szkic (opcja
+„szkic”) nie udostępnia plików publicznie, więc mini instalator ze szkicu
+niczego nie pobierze. Do testów kładź pliki obok siebie (patrz wyżej).
 
 ```bash
 git tag v0.1.1 && git push origin v0.1.1      # tag obrazów ze zmiennej repo BPP_IMAGE_TAG

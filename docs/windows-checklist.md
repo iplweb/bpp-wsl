@@ -185,3 +185,39 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   `%LOCALAPPDATA%\Programs\BPP` zostają; ponowne „Odinstaluj” kończy
   dzieła.
   Wynik:
+
+## Mini instalator i pobieranie (wydanie z trzech plików)
+
+- [ ] **M1.** Sam `BPP-Setup-<wersja>.exe` (kilkadziesiąt KB) w pustym folderze:
+  okienko „Pobieranie instalatora BPP… X z Y MB” → właściwy instalator
+  z logo. **Bez okna UAC** przy starcie mini instalatora (manifest `asInvoker`).
+  Wynik:
+- [ ] **M2.** Krok „Pobieranie dystrybucji BPP… X z Y MB”: pasek kroku
+  i paska całości rosną. Po instalacji w `%LOCALAPPDATA%\BPP\download` nie
+  zostaje rootfs ani pobrany `BPP-<wersja>.exe`.
+  Wynik:
+- [ ] **M3.** Odłączenie sieci w trakcie pobierania rootfs: po ok. minucie
+  strona „Nie udało się pobrać dystrybucji BPP” ze „Spróbuj ponownie”. Po
+  przywróceniu sieci ponowienie **wznawia** pobieranie (log: „Wznawianie
+  pobierania od … B”), nie zaczyna od zera.
+  Wynik:
+- [ ] **M4.** Offline: trzy pliki wydania w jednym folderze, sieć odłączona →
+  instalacja dochodzi do pobierania obrazów (te wymagają sieci) bez
+  pobierania z GitHuba (log: „Dystrybucja z pliku: …”).
+  Wynik:
+- [ ] **M5.** Podmieniony / uszkodzony `BPP-<wersja>.exe` obok mini
+  instalatora: mini instalator go nie uruchamia (pobiera właściwy z GitHuba).
+  Wynik:
+- [ ] **M6.** Ścieżka z restartem (bez WSL): po restarcie RunOnce uruchamia
+  `%LOCALAPPDATA%\Programs\BPP\BPP.exe --setup --resume` i instalacja kończy
+  się sukcesem, choć pobrana kopia `BPP-<wersja>.exe` została usunięta.
+  Wynik:
+- [ ] **M7.** Komputer z mniej niż 8 GB RAM (albo dysk z mniej niż 25 GB
+  wolnego): strona wymagań z przyciskiem **„Zainstaluj mimo to”** →
+  ostrzeżenie Tak/Nie → instalacja idzie dalej. Przy zajętym porcie 8443 lub
+  procesorze ARM tego przycisku **nie ma**. Po „mimo to” i restarcie (WSL)
+  wznowiona instalacja nie pyta drugi raz.
+  Wynik:
+- [ ] **M8.** Windows Defender / SmartScreen nie blokuje mini instalatora ani
+  pobranego `BPP-<wersja>.exe` (pliki niepodpisane — odnotuj ostrzeżenia).
+  Wynik:

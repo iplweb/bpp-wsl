@@ -25,5 +25,15 @@ jobs:
       - name: Smoke - nieznany argument konczy sie kodem 2 bez UI
         shell: pwsh
         run: |
-          $p = Start-Process -FilePath dist\tray\BPP.exe -ArgumentList '--bogus' -Wait -PassThru
-          if ($p.ExitCode -ne 2) { throw "Oczekiwano kodu 2, jest $($p.ExitCode)" }
+          foreach ($a in @('--bogus', '--setup --bogus')) {
+            $p = Start-Process -FilePath dist\tray\BPP.exe -ArgumentList $a -Wait -PassThru
+            if ($p.ExitCode -ne 2) { throw "BPP.exe $a`: oczekiwano kodu 2, jest $($p.ExitCode)" }
+          }
+      - name: Mini instalator - rozmiar i manifest asInvoker
+        shell: pwsh
+        run: |
+          $exe = 'installer\src\BPP.Bootstrap\bin\Release\net48\BPP-Setup.exe'
+          $size = (Get-Item $exe).Length
+          Write-Host "BPP-Setup.exe: $size B"
+          if ($size -gt 200KB) { throw "Mini instalator urosl do $size B" }
+          if (-not (Select-String -Path $exe -Pattern 'asInvoker' -SimpleMatch -Quiet)) { throw "Brak manifestu asInvoker" }

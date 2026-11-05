@@ -20,11 +20,11 @@ public class InstallerPlanTests
 
     [Fact]
     public void Preflight_ok_extracts_tray_before_wsl()
-        => Assert.Equal(S.ExtractTray, InstallerPlan.Next(After(S.Preflight) with { PreflightOk = true }));
+        => Assert.Equal(S.InstallProgram, InstallerPlan.Next(After(S.Preflight) with { PreflightOk = true }));
 
     [Fact]
     public void Tray_then_uninstall_entry_so_partial_installs_are_removable()
-        => Assert.Equal(S.RegisterUninstall, InstallerPlan.Next(After(S.ExtractTray)));
+        => Assert.Equal(S.RegisterUninstall, InstallerPlan.Next(After(S.InstallProgram)));
 
     [Fact]
     public void Uninstall_entry_then_wsl_check()
@@ -53,7 +53,7 @@ public class InstallerPlanTests
         Assert.False(InstallerPlan.IsFinal(S.StopRunningBpp));
         s = s with { Completed = S.StopRunningBpp, StopBppAttempted = true };
         Assert.Equal(S.Preflight, InstallerPlan.Next(s));
-        Assert.Equal(S.ExtractTray, InstallerPlan.Next(s with { Completed = S.Preflight, PreflightOk = true }));
+        Assert.Equal(S.InstallProgram, InstallerPlan.Next(s with { Completed = S.Preflight, PreflightOk = true }));
     }
 
     [Fact]
@@ -73,11 +73,99 @@ public class InstallerPlanTests
             Init = InitOutcome.Failed, PortHeldByBpp = true,
         }));
 
+    // ---- 1b. "Zainstaluj mimo to" (too little RAM / disk) ----
+
+    private static InstallerState SoftOnly => After(S.Preflight) with { PreflightOk = false, PreflightSoftOnly = true };
+
+    [Fact]
+    public void Soft_problems_show_the_page_offering_install_anyway()
+    {
+        Assert.Equal(S.PreflightFailed, InstallerPlan.Next(SoftOnly));
+        Assert.True(InstallerPlan.CanInstallAnyway(SoftOnly));
+    }
+
+    [Fact]
+    public void Install_anyway_continues_with_the_program()
+        => Assert.Equal(S.InstallProgram, InstallerPlan.Next(InstallerPlan.InstallAnywayFrom(SoftOnly)));
+
+    [Fact]
+    public void Install_anyway_is_not_offered_for_hard_problems()
+    {
+        var hard = After(S.Preflight) with { PreflightOk = false };
+        Assert.False(InstallerPlan.CanInstallAnyway(hard));
+        Assert.Throws<InvalidOperationException>(() => InstallerPlan.InstallAnywayFrom(hard));
+        Assert.False(InstallerPlan.CanInstallAnyway(HeldByBpp)); // never next to "Zatrzymaj BPP"
+    }
+
+    [Fact]
+    public void Install_anyway_from_a_restart_never_skips_hard_problems()
+    {
+        // --install-anyway after a restart: preflight runs again and a busy port must still stop the install
+        var resumed = new InstallerState { InstallAnyway = true };
+        Assert.Equal(S.PreflightFailed, InstallerPlan.Next(resumed with { Completed = S.Preflight, PreflightOk = false }));
+        Assert.Equal(S.InstallProgram, InstallerPlan.Next(resumed with
+        {
+            Completed = S.Preflight, PreflightOk = false, PreflightSoftOnly = true,
+        }));
+        Assert.False(InstallerPlan.CanInstallAnyway(resumed with
+        {
+            Completed = S.Preflight, PreflightOk = false, PreflightSoftOnly = true,
+        }));
+    }
+
+    [Fact]
+    public void Preflight_soft_problems_are_only_ram_and_disk()
+    {
+        Assert.True(Preflight.OnlySoft(new[] { PreflightProblem.TooLittleRam, PreflightProblem.TooLittleDisk }));
+        Assert.False(Preflight.OnlySoft(new[] { PreflightProblem.TooLittleRam, PreflightProblem.PortBusy }));
+        Assert.False(Preflight.OnlySoft(new[] { PreflightProblem.NotX64 }));
+        Assert.False(Preflight.OnlySoft(Array.Empty<PreflightProblem>()));
+    }
+
+    // ---- 2a. rootfs download ----
+
+    [Fact]
+    public void Failed_download_is_a_retryable_page_that_downloads_again()
+    {
+        var s = After(S.DownloadRootfs) with { WslReady = true, RootfsReady = false };
+        Assert.Equal(S.DownloadFailed, InstallerPlan.Next(s));
+        Assert.True(InstallerPlan.IsFinal(S.DownloadFailed));
+        Assert.False(InstallerPlan.IsFinal(S.DownloadRootfs));
+        Assert.True(InstallerPlan.CanRetry(S.DownloadFailed));
+        Assert.Equal(S.DownloadRootfs, InstallerPlan.Next(InstallerPlan.Retry(s)));
+    }
+
+    [Fact]
+    public void Download_happens_before_a_reinstall_can_remove_the_old_distro()
+    {
+        var steps = new List<S>();
+        var s = new InstallerState();
+        for (var i = 0; i < 20; i++)
+        {
+            var step = InstallerPlan.Next(s);
+            steps.Add(step);
+            if (step == S.Unregister) break;
+            s = step switch
+            {
+                S.Preflight => s with { Completed = step, PreflightOk = true },
+                S.CheckWsl => s with { Completed = step, WslReady = true },
+                S.DownloadRootfs => s with { Completed = step, RootfsReady = true },
+                S.CheckDistro => s with { Completed = step, DistroExists = true },
+                S.AskReinstall => s with { Completed = step, ReinstallConfirmed = true },
+                _ => s with { Completed = step },
+            };
+        }
+        Assert.True(steps.IndexOf(S.DownloadRootfs) < steps.IndexOf(S.Unregister));
+    }
+
     // ---- 3. WSL ----
 
     [Fact]
-    public void Wsl_ready_goes_to_distro_check()
-        => Assert.Equal(S.CheckDistro, InstallerPlan.Next(After(S.CheckWsl) with { WslReady = true }));
+    public void Wsl_ready_downloads_the_rootfs_then_checks_the_distro()
+    {
+        Assert.Equal(S.DownloadRootfs, InstallerPlan.Next(After(S.CheckWsl) with { WslReady = true }));
+        Assert.Equal(S.CheckDistro, InstallerPlan.Next(After(S.DownloadRootfs) with { RootfsReady = true }));
+    }
 
     [Fact]
     public void Wsl_missing_and_features_off_enables_wsl()
@@ -146,17 +234,17 @@ public class InstallerPlanTests
             s = step switch
             {
                 S.Preflight => s with { Completed = step, PreflightOk = true },
-                S.ExtractTray or S.RegisterUninstall => s with { Completed = step },
+                S.InstallProgram or S.RegisterUninstall => s with { Completed = step },
                 S.CheckWsl => s with { Completed = step, WslReady = s.EnableWsl == EnableWslOutcome.Ok && s.WslPackageInstallAttempted },
                 S.EnableWsl => s with { Completed = step, EnableWsl = EnableWslOutcome.Ok },
                 S.InstallWslPackage => s with { Completed = step, WslPackageInstallAttempted = true },
                 _ => s,
             };
-            if (step == S.CheckDistro) break;
+            if (step == S.DownloadRootfs) break;
         }
         Assert.Equal(new[]
         {
-            S.Preflight, S.ExtractTray, S.RegisterUninstall, S.CheckWsl, S.EnableWsl, S.InstallWslPackage, S.CheckWsl, S.CheckDistro,
+            S.Preflight, S.InstallProgram, S.RegisterUninstall, S.CheckWsl, S.EnableWsl, S.InstallWslPackage, S.CheckWsl, S.DownloadRootfs,
         }, seen);
     }
 
@@ -233,6 +321,7 @@ public class InstallerPlanTests
             {
                 S.Preflight => s with { Completed = step, PreflightOk = true },
                 S.CheckWsl => s with { Completed = step, WslReady = true, WslFeatureHint = true },
+                S.DownloadRootfs => s with { Completed = step, RootfsReady = true },
                 S.CheckDistro => s with { Completed = step, DistroExists = false },
                 S.InstallWslPackage => s with { Completed = step, WslPackageInstallAttempted = true },
                 S.ImportDistro => s with { Completed = step, ImportOk = ++imports > 1 && s.WslPackageInstallAttempted },

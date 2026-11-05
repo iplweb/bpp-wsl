@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Podpisuje exe przez jsign w kontenerze: build/sign.sh <plik.exe>
-# Podpis nalezy wykonac PO BPP.Pack (PayloadArchive toleruje dopisany podpis).
+# BPP.exe podpisuje build/build.sh PRZED policzeniem jego SHA-256 (wkompilowanej w mini instalator).
 #
 # Zmienne (klasyczny keystore / token / PFX):
 #   BPP_SIGN_KEYSTORE   sciezka do keystore (PFX/JKS) lub URL PKCS#11 / "NONE"

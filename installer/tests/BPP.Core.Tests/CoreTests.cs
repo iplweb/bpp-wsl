@@ -179,7 +179,7 @@ public class InstallProgressTests
     {
         var order = new[]
         {
-            InstallerStep.Preflight, InstallerStep.ExtractTray, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl,
+            InstallerStep.Preflight, InstallerStep.InstallProgram, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl, InstallerStep.DownloadRootfs,
             InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit, InstallerStep.AddFirewall,
             InstallerStep.CreateShortcut, InstallerStep.Done,
         };
@@ -245,5 +245,39 @@ public class SupportMailTests
         var body = Uri.UnescapeDataString(uri[(uri.IndexOf("&body=", StringComparison.Ordinal) + 6)..]);
         Assert.Contains("BPP-diagnostyka-1.zip", body);
         Assert.Contains("0.1.4", Uri.UnescapeDataString(uri));
+    }
+}
+
+public class AppArgsTests
+{
+    [Theory]
+    [InlineData(new string[0], AppMode.Tray)]
+    [InlineData(new[] { "--tray" }, AppMode.Tray)]
+    [InlineData(new[] { "--uninstall" }, AppMode.Uninstall)]
+    [InlineData(new[] { "--setup" }, AppMode.Setup)]
+    public void Modes(string[] args, AppMode mode) => Assert.Equal(mode, AppArgs.Parse(args)!.Mode);
+
+    [Theory]
+    [InlineData("--bogus")]
+    [InlineData("--setup", "--bogus")]
+    [InlineData("--setup", "--rootfs")]
+    [InlineData("--setup", "--resume", "--resume")]
+    [InlineData("--tray", "--setup")]
+    [InlineData("--resume")]
+    public void Unknown_arguments_are_rejected(params string[] args) => Assert.Null(AppArgs.Parse(args));
+
+    [Fact]
+    public void Setup_options()
+    {
+        var a = AppArgs.Parse(new[] { "--setup", "--rootfs", @"D:\usb\bpp-rootfs-0.2.0.tar.gz", "--install-anyway", "--resume" })!;
+        Assert.Equal(new AppArgs(AppMode.Setup, Resume: true, InstallAnyway: true, Rootfs: @"D:\usb\bpp-rootfs-0.2.0.tar.gz"), a);
+    }
+
+    [Fact]
+    public void Resume_command_round_trips_the_choices()
+    {
+        var a = new AppArgs(AppMode.Setup, InstallAnyway: true, Rootfs: @"C:\x y\r.tar.gz");
+        Assert.Equal("--setup --resume --install-anyway --rootfs \"C:\\x y\\r.tar.gz\"", a.ResumeCommandArgs());
+        Assert.Equal("--setup --resume", new AppArgs(AppMode.Setup).ResumeCommandArgs());
     }
 }

@@ -1,5 +1,8 @@
+using System.Net;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using BPP.Core;
+using BPP.Core.Download;
 using BPP.Windows;
 using Step = BPP.Core.InstallerStep;
 
@@ -11,21 +14,19 @@ namespace BPP.Setup;
 /// </summary>
 internal sealed class InstallerFlow
 {
-    public const string RootfsEntry = "rootfs";
-    public const string TrayEntry = "BPP.exe";
-
     private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(2);
     private const string RootfsTempPrefix = "BPP-rootfs-";
 
     private readonly SetupForm _ui;
     private readonly string _setupExe;
-    private readonly IReadOnlyDictionary<string, PayloadEntry> _payload;
+    private readonly AppArgs _args;
+    private string? _rootfsPath; // verified archive for wsl --import (set by DownloadRootfs)
     private readonly WslClient _wsl = new();
     private readonly WindowsFeatures _features = new();
     private readonly Firewall _firewall = new();
     private readonly Registration _registration = new();
 
-    private InstallerState _state = new();
+    private InstallerState _state;
     private IReadOnlyList<string> _preflightProblems = Array.Empty<string>();
     private int? _dismExitCode;
     private string _lastError = "";
@@ -33,11 +34,13 @@ internal sealed class InstallerFlow
     private CancellationTokenSource? _initCts;
     private string? _failureDiag; // bpp-ctl diag taken after a failed init, before the stack was stopped
 
-    public InstallerFlow(SetupForm ui, string setupExe, IReadOnlyDictionary<string, PayloadEntry> payload)
+    public InstallerFlow(SetupForm ui, string setupExe, AppArgs args)
     {
         _ui = ui;
         _setupExe = setupExe;
-        _payload = payload;
+        _args = args;
+        // "--install-anyway" (after a restart): the user already accepted too little RAM / disk
+        _state = new InstallerState { InstallAnyway = args.InstallAnyway };
         _wsl.LogLine += _ui.AppendLog; // raised from two pump threads; AppendLog is thread-safe
     }
 
@@ -53,7 +56,7 @@ internal sealed class InstallerFlow
         // A stale "--resume" entry (e.g. the user ran Setup by hand after the restart) must not fire again later.
         try { _registration.ClearRunOnce(); }
         catch (Exception ex) { _ui.AppendLog("RunOnce: " + ex.Message); }
-        SweepStaleRootfs();
+        SweepStaleFiles();
         return LoopAsync();
     }
 
@@ -67,6 +70,14 @@ internal sealed class InstallerFlow
     public Task StopBppAsync()
     {
         _state = InstallerPlan.StopBpp(_state);
+        return LoopAsync();
+    }
+
+    /// <summary>"Zainstaluj mimo to" on the preflight page (too little RAM / disk only).</summary>
+    public Task InstallAnywayAsync()
+    {
+        _state = InstallerPlan.InstallAnywayFrom(_state);
+        _ui.AppendLog("Użytkownik wybrał „Zainstaluj mimo to”.");
         return LoopAsync();
     }
 
@@ -120,17 +131,25 @@ internal sealed class InstallerFlow
                 var heldByBpp = Preflight.PortHeldByBpp(check.Problems, check.PortOwner, bppDistro);
                 _preflightProblems = Describe(check, heldByBpp, s.StopBppAttempted);
                 foreach (var p in _preflightProblems) _ui.AppendLog(p);
-                return s with { PreflightOk = check.Problems.Count == 0, PortHeldByBpp = heldByBpp };
+                return s with
+                {
+                    PreflightOk = check.Problems.Count == 0,
+                    PreflightSoftOnly = Preflight.OnlySoft(check.Problems),
+                    PortHeldByBpp = heldByBpp,
+                };
 
             case Step.StopRunningBpp:
                 _ui.SetStatus("Zatrzymywanie BPP…", null);
                 await StopDistroAsync();
                 return s with { StopBppAttempted = true };
 
-            case Step.ExtractTray:
+            case Step.InstallProgram:
                 _ui.SetStatus("Kopiowanie programu BPP…", null);
-                await Task.Run(ExtractTray);
+                await Task.Run(InstallProgram);
                 return s;
+
+            case Step.DownloadRootfs:
+                return s with { RootfsReady = await DownloadRootfsAsync() };
 
             case Step.CheckWsl:
                 _ui.SetStatus("Sprawdzanie WSL…", null);
@@ -155,7 +174,9 @@ internal sealed class InstallerFlow
                 return s with { WslPackageInstallAttempted = true };
 
             case Step.ScheduleResume:
-                _registration.SetRunOnce($"\"{_setupExe}\" {Program.ResumeArg}");
+                // BPP.exe in the program folder: the copy the mini installer downloaded may be gone after the restart
+                _registration.SetRunOnce(
+                    $"\"{AppPaths.TrayExe}\" {(_args with { InstallAnyway = s.InstallAnyway }).ResumeCommandArgs()}");
                 return s;
 
             case Step.CheckDistro:
@@ -224,8 +245,24 @@ internal sealed class InstallerFlow
                 _ui.ShowRestart();
                 break;
             case Step.PreflightFailed:
-                _ui.ShowError("Ten komputer nie spełnia wymagań BPP", _preflightProblems, canRetry: false,
-                    canStopBpp: InstallerPlan.CanStopBpp(_state));
+                var anyway = InstallerPlan.CanInstallAnyway(_state);
+                _ui.ShowError("Ten komputer nie spełnia wymagań BPP", anyway
+                        ? _preflightProblems.Append(
+                            "Możesz zainstalować BPP mimo to (przycisk „Zainstaluj mimo to”), ale instalacja może się " +
+                            "nie udać, a BPP może działać wolno lub zatrzymać się z braku pamięci albo miejsca.").ToList()
+                        : _preflightProblems,
+                    canRetry: false, canStopBpp: InstallerPlan.CanStopBpp(_state), canInstallAnyway: anyway);
+                break;
+            case Step.DownloadFailed:
+                _ui.ShowError("Nie udało się pobrać dystrybucji BPP", new[]
+                {
+                    _lastError,
+                    "Sprawdź połączenie z internetem i kliknij „Spróbuj ponownie” — pobieranie zostanie wznowione " +
+                    "od miejsca, w którym się przerwało.",
+                    "Jeśli sieć blokuje GitHub (np. serwer pośredniczący w firmie lub na uczelni), pobierz plik " +
+                    $"{RootfsAssetName} z zakładki Releases na innym komputerze, połóż go obok BPP-Setup.exe " +
+                    "i uruchom instalator ponownie.",
+                }, canRetry: true);
                 break;
             case Step.WslNeedsAdmin:
                 _ui.ShowError("Nie można włączyć WSL", WithImportError(
@@ -338,15 +375,20 @@ internal sealed class InstallerFlow
     private static ulong InstalledRamBytes()
         => GetPhysicallyInstalledSystemMemory(out var kb) ? kb * 1024 : (ulong)GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
 
-    private void ExtractTray()
+    /// <summary>
+    /// Copies this exe (the one BPP.exe: tray + installer) into the program folder. Already running from there
+    /// (resume after a restart, or a rerun from the Start menu folder): nothing to do.
+    /// </summary>
+    private void InstallProgram()
     {
+        if (string.Equals(Path.GetFullPath(_setupExe), Path.GetFullPath(AppPaths.TrayExe),
+                StringComparison.OrdinalIgnoreCase))
+            return;
         Directory.CreateDirectory(AppPaths.ProgramDir);
         var tmp = AppPaths.TrayExe + ".new";
         try
         {
-            using (var src = PayloadArchive.Open(_setupExe, _payload[TrayEntry]))
-            using (var dst = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
-                src.CopyTo(dst);
+            File.Copy(_setupExe, tmp, overwrite: true);
             File.Move(tmp, AppPaths.TrayExe, overwrite: true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -361,41 +403,119 @@ internal sealed class InstallerFlow
         }
     }
 
+    // ---- rootfs -----------------------------------------------------------------------------------------
+
+    private static string Metadata(string key)
+        => typeof(InstallerFlow).Assembly.GetCustomAttributes<AssemblyMetadataAttribute>()
+               .FirstOrDefault(a => a.Key == key)?.Value?.Trim() ?? "";
+
+    /// <summary>Pinned at build time (build/build.sh); empty in development builds.</summary>
+    private static string RootfsUrl => Metadata("RootfsUrl");
+
+    private static string? RootfsSha256 => Metadata("RootfsSha256") is { Length: > 0 } h ? h : null;
+
+    private static string RootfsAssetName
+        => RootfsUrl.Length > 0 ? Uri.UnescapeDataString(RootfsUrl[(RootfsUrl.LastIndexOf('/') + 1)..]) : "bpp-rootfs-<wersja>.tar.gz";
+
+    /// <summary>Named after the pinned hash, so a partial file of another version is never resumed.</summary>
+    private static string RootfsDownloadPath
+        => Path.Combine(AppPaths.DownloadDir, $"bpp-rootfs-{(RootfsSha256 ?? "dev")[..Math.Min(12, (RootfsSha256 ?? "dev").Length)]}.tar.gz");
+
     /// <summary>
-    /// Extracts the rootfs to %TEMP% and imports it. Only a failing <c>wsl --import</c> returns false (the plan may
-    /// then offer enable-wsl); a failing extraction (e.g. full disk) is an ordinary error.
+    /// Makes <see cref="_rootfsPath"/> a verified rootfs archive: the file given with <c>--rootfs</c> (the mini
+    /// installer passes one lying next to it), else the cached or freshly downloaded copy from GitHub Releases.
+    /// Idempotent: after the import-failure loop it only re-checks the cached file.
+    /// </summary>
+    private async Task<bool> DownloadRootfsAsync()
+    {
+        var sha = RootfsSha256;
+        if (_args.Rootfs is { } local)
+        {
+            _ui.SetStatus("Sprawdzanie pliku dystrybucji BPP…", null);
+            if (!File.Exists(local))
+                _ui.AppendLog($"Plik {local} nie istnieje — pobieram dystrybucję z internetu.");
+            else if (sha != null && !await Task.Run(() => FileHash.Matches(local, sha)))
+                _ui.AppendLog($"Plik {local} ma niewłaściwą sumę SHA-256 (inna wersja albo uszkodzony) — pobieram " +
+                              "dystrybucję z internetu.");
+            else
+            {
+                if (sha == null) _ui.AppendLog("Uwaga: kompilacja bez przypiętej sumy SHA-256 — plik nie jest sprawdzany.");
+                _ui.AppendLog("Dystrybucja z pliku: " + local);
+                _rootfsPath = local;
+                return true;
+            }
+        }
+
+        if (RootfsUrl.Length == 0 || sha == null)
+        {
+            _lastError = "Ta kompilacja instalatora nie zna adresu ani sumy kontrolnej dystrybucji BPP " +
+                         "(kompilacja deweloperska). Podaj plik: BPP.exe --setup --rootfs <plik.tar.gz>.";
+            return false;
+        }
+
+        _ui.SetStatus("Pobieranie dystrybucji BPP…", 0);
+        var progress = new Progress<DownloadProgress>(ReportDownload); // created on the UI thread: posts there
+        try
+        {
+            using var handler = new HttpClientHandler
+            {
+                UseProxy = true,
+                DefaultProxyCredentials = CredentialCache.DefaultCredentials, // authenticating proxies (NTLM)
+            };
+            using var http = new HttpClient(handler) { Timeout = Timeout.InfiniteTimeSpan };
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"BPP-Setup/{Version}");
+            _ui.AppendLog("Pobieranie: " + RootfsUrl);
+            // off the UI thread: re-checking a cached ~170 MB file hashes it before the first await
+            await Task.Run(() => new Downloader(http).DownloadAsync(new Uri(RootfsUrl), RootfsDownloadPath, sha,
+                progress, CancellationToken.None, _ui.AppendLog));
+        }
+        catch (DownloadFailedException ex)
+        {
+            _lastError = ex.Message;
+            _ui.AppendLog(ex.ToString());
+            return false;
+        }
+        _rootfsPath = RootfsDownloadPath;
+        return true;
+    }
+
+    private long _lastDownloadReport;
+
+    private void ReportDownload(DownloadProgress p)
+    {
+        var now = Environment.TickCount64;
+        if (now - _lastDownloadReport < 200 && p.Fraction is not 1.0) return;
+        _lastDownloadReport = now;
+        var text = p.Total is { } total
+            ? $"Pobieranie dystrybucji BPP… {Mb(p.Received)} z {Mb(total)} MB"
+            : $"Pobieranie dystrybucji BPP… {Mb(p.Received)} MB";
+        _ui.SetStatus(text, p.Fraction);
+        _ui.SetOverall(InstallProgress.DuringDownload(p.Fraction ?? 0));
+    }
+
+    private static string Mb(long bytes) => (bytes / 1048576.0).ToString("0");
+
+    /// <summary>
+    /// Imports the verified rootfs. Only a failing <c>wsl --import</c> returns false (the plan may then offer
+    /// enable-wsl); the downloaded copy is kept until an import succeeds, so that loop does not download again.
     /// </summary>
     private async Task<bool> ImportAsync()
     {
-        var tar = Path.Combine(Path.GetTempPath(), RootfsTempPrefix + $"{Guid.NewGuid():N}.tar.gz");
+        var tar = _rootfsPath ?? throw new InvalidOperationException("Brak pliku dystrybucji BPP do zaimportowania.");
+        _ui.SetStatus("Importowanie dystrybucji BPP (może potrwać kilka minut)…", null);
         try
         {
-            _ui.SetStatus("Rozpakowywanie dystrybucji BPP…", null);
-            await Task.Run(() =>
-            {
-                using var src = PayloadArchive.Open(_setupExe, _payload[RootfsEntry]);
-                using var dst = new FileStream(tar, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1 << 20);
-                src.CopyTo(dst, 1 << 20);
-            });
-
-            _ui.SetStatus("Importowanie dystrybucji BPP (może potrwać kilka minut)…", null);
-            try
-            {
-                await _wsl.ImportAsync(tar);
-            }
-            catch (InvalidOperationException ex)
-            {
-                _lastError = _lastImportError = ex.Message;
-                _ui.AppendLog(ex.Message);
-                await RemovePartialDistroAsync();
-                return false;
-            }
+            await _wsl.ImportAsync(tar);
         }
-        finally
+        catch (InvalidOperationException ex)
         {
-            TryDelete(tar);
+            _lastError = _lastImportError = ex.Message;
+            _ui.AppendLog(ex.Message);
+            await RemovePartialDistroAsync();
+            return false;
         }
 
+        if (tar == RootfsDownloadPath) TryDelete(tar); // ~170 MB no longer needed; a --rootfs file is the user's
         await _wsl.TrySetSparseAsync();
         return true;
     }
@@ -474,10 +594,11 @@ internal sealed class InstallerFlow
         => typeof(InstallerFlow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
     /// <summary>
-    /// Best effort: a killed or crashed earlier run may have left its ~1 GB rootfs in %TEMP%. Only one Setup runs at
-    /// a time (mutex), so every match is stale; a file still in use simply stays.
+    /// Best effort: a killed or crashed run of an older installer may have left its ~1 GB rootfs in %TEMP%, and
+    /// older mini-installer downloads of BPP.exe may sit in the download folder. Only one Setup runs at a time
+    /// (mutex), so every match is stale (except this very exe); a file still in use simply stays.
     /// </summary>
-    private void SweepStaleRootfs()
+    private void SweepStaleFiles()
     {
         try
         {
@@ -486,10 +607,21 @@ internal sealed class InstallerFlow
                 _ui.AppendLog("Usuwanie pozostałości poprzedniej instalacji: " + f);
                 TryDelete(f);
             }
+            if (Directory.Exists(AppPaths.DownloadDir))
+                foreach (var f in Directory.EnumerateFiles(AppPaths.DownloadDir))
+                {
+                    var name = Path.GetFileName(f);
+                    var staleApp = (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
+                                    name.EndsWith(".exe" + Downloader.PartSuffix, StringComparison.OrdinalIgnoreCase)) &&
+                                   !string.Equals(Path.GetFullPath(f), Path.GetFullPath(_setupExe), StringComparison.OrdinalIgnoreCase);
+                    var staleRootfs = name.StartsWith("bpp-rootfs-", StringComparison.OrdinalIgnoreCase) &&
+                                      !name.StartsWith(Path.GetFileName(RootfsDownloadPath), StringComparison.OrdinalIgnoreCase);
+                    if (staleApp || staleRootfs) TryDelete(f);
+                }
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            _ui.AppendLog("Sprzątanie %TEMP%: " + ex.Message);
+            _ui.AppendLog("Sprzątanie plików tymczasowych: " + ex.Message);
         }
     }
 

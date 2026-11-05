@@ -17,7 +17,7 @@ trap 'rm -f "$tmp"' EXIT
 
 docker buildx build --platform linux/amd64 \
   --build-arg "BPP_IMAGE_TAG=$tag" \
-  --output type=tar,dest=- "$repo/distro" | gzip > "$tmp"
+  --output type=tar,dest=- "$repo/distro" | gzip -9n > "$tmp"
 mv "$tmp" "$out"
 trap - EXIT
 echo "$out"

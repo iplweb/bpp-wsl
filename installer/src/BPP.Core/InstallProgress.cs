@@ -6,6 +6,8 @@ namespace BPP.Core;
 /// </summary>
 public static class InstallProgress
 {
+    private const double DownloadStart = 0.04;
+    private const double DownloadEnd = 0.10;
     private const double InitStart = 0.15;
     private const double PullStart = 0.18;
     private const double PullEnd = 0.85;
@@ -14,17 +16,22 @@ public static class InstallProgress
     public static double AtStart(InstallerStep step) => step switch
     {
         InstallerStep.Preflight or InstallerStep.StopRunningBpp => 0,
-        InstallerStep.ExtractTray => 0.01,
+        InstallerStep.InstallProgram => 0.01,
         InstallerStep.RegisterUninstall => 0.02,
         InstallerStep.CheckWsl or InstallerStep.EnableWsl or InstallerStep.InstallWslPackage
             or InstallerStep.ScheduleResume => 0.03,
-        InstallerStep.CheckDistro or InstallerStep.AskReinstall or InstallerStep.Unregister => 0.05,
-        InstallerStep.ImportDistro => 0.06,
+        InstallerStep.DownloadRootfs => DownloadStart,
+        InstallerStep.CheckDistro or InstallerStep.AskReinstall or InstallerStep.Unregister => DownloadEnd,
+        InstallerStep.ImportDistro => 0.11,
         InstallerStep.RunInit or InstallerStep.StopDistro => InitStart,
         InstallerStep.AddFirewall => 0.96,
         InstallerStep.CreateShortcut => 0.98,
         _ => 1,
     };
+
+    /// <summary>Position while the rootfs downloads (<paramref name="fraction"/> 0..1 of the file).</summary>
+    public static double DuringDownload(double fraction)
+        => DownloadStart + (DownloadEnd - DownloadStart) * Math.Clamp(fraction, 0, 1);
 
     /// <summary>Position during <c>bpp-ctl init</c>; <see cref="BppEvent.Progress"/> of "pull" is 0..1 over all images.</summary>
     public static double DuringInit(BppEvent ev) => ev.Step switch

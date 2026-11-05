@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The mini BPP-Setup.exe: .NET Framework 4.8 is part of every Windows 10/11, so this exe carries no runtime and
+    stays tens of kilobytes. It downloads the real installer (BPP.exe, .NET 10, self-contained) from GitHub Releases,
+    checks the SHA-256 pinned here at build time and runs it with the setup switch.
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>BPP-Setup</AssemblyName>
+    <RootNamespace>BPP.Bootstrap</RootNamespace>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>..\..\assets\bpp-small.ico</ApplicationIcon>
+    <DebugType>none</DebugType>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+  </PropertyGroup>
+
+  <!-- Pinned by build/build.sh (-p:AppUrl=… -p:AppSha256=… -p:AppFileName=… -p:RootfsFileName=…). -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppUrl</_Parameter1>
+      <_Parameter2>$(AppUrl)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppSha256</_Parameter1>
+      <_Parameter2>$(AppSha256)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>AppFileName</_Parameter1>
+      <_Parameter2>$(AppFileName)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RootfsFileName</_Parameter1>
+      <_Parameter2>$(RootfsFileName)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <Reference Include="System.Net.Http" />
+    <Compile Include="..\BPP.Core\Download\Downloader.cs" Link="Download\Downloader.cs" />
+  </ItemGroup>
+
+</Project>

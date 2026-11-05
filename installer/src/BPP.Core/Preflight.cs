@@ -22,6 +22,17 @@ public static class Preflight
     }
 
     /// <summary>
+    /// Too little RAM or disk only makes BPP slow or lets it run out of space later: the user may install anyway.
+    /// A non-x64 CPU or a busy port 8443 make the install fail outright, so they are never overridable.
+    /// </summary>
+    public static bool IsSoft(PreflightProblem problem)
+        => problem is PreflightProblem.TooLittleRam or PreflightProblem.TooLittleDisk;
+
+    /// <summary>"Zainstaluj mimo to" is offered only when there are problems and every one of them is soft.</summary>
+    public static bool OnlySoft(IReadOnlyList<PreflightProblem> problems)
+        => problems.Count > 0 && problems.All(IsSoft);
+
+    /// <summary>
     /// Windows-side processes that hold a port on behalf of a WSL distro (wslrelay forwards localhost for
     /// WSL2 distros; the others cover other WSL builds / networking modes).
     /// </summary>

@@ -1,16 +1,24 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- The installer UI: a library linked into BPP.exe (BPP.Tray), started as BPP.exe with the setup switch. -->
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
-    <AssemblyName>BPP-Setup</AssemblyName>
     <RootNamespace>BPP.Setup</RootNamespace>
     <PlatformTarget>x64</PlatformTarget>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <ApplicationIcon>..\..\assets\bpp.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <!-- Pinned rootfs (build/build.sh passes -p:RootfsUrl=… -p:RootfsSha256=…); empty in development builds. -->
+  <ItemGroup>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RootfsUrl</_Parameter1>
+      <_Parameter2>$(RootfsUrl)</_Parameter2>
+    </AssemblyAttribute>
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>RootfsSha256</_Parameter1>
+      <_Parameter2>$(RootfsSha256)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
 
   <ItemGroup>
     <EmbeddedResource Include="..\..\assets\bpp.ico" LogicalName="BPP.Setup.bpp.ico" />

@@ -1,18 +1,17 @@
+using BPP.Core;
+
 namespace BPP.Setup;
 
-internal static class Program
+/// <summary>
+/// <c>BPP.exe --setup [--resume] [--install-anyway] [--rootfs &lt;file&gt;]</c>; BPP.exe runs asInvoker, UAC only for
+/// System32 dism.exe / netsh.exe (Ruling R8). The caller has already run <c>ApplicationConfiguration.Initialize</c>.
+/// </summary>
+public static class SetupEntry
 {
-    public const string ResumeArg = "--resume";
     private const string MutexName = @"Local\BPP.Setup";
 
-    /// <summary><c>BPP-Setup.exe [--resume]</c>; runs asInvoker, UAC only for System32 dism.exe / netsh.exe (Ruling R8).</summary>
-    [STAThread]
-    private static int Main(string[] args)
+    public static int Run(AppArgs args)
     {
-        if (args is not [] and not [ResumeArg]) return 2;
-
-        ApplicationConfiguration.Initialize();
-
         using var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
         if (!createdNew)
         {
@@ -20,7 +19,7 @@ internal static class Program
             return 1;
         }
 
-        using (var form = new SetupForm(resume: args is [ResumeArg]))
+        using (var form = new SetupForm(args))
             Application.Run(form);
         GC.KeepAlive(mutex);
         return 0;
