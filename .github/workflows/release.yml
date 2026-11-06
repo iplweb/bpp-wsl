@@ -81,8 +81,8 @@ jobs:
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" "${files[@]}" --clobber
           else
-            notes="$(printf 'Instalator BPP dla Windows %s (obrazy BPP `%s`).\n\nPobierz `BPP-Setup-%s.exe` ponizej (maly plik, kilkadziesiat KB) i uruchom dwuklikiem — sam pobierze z tego wydania program `BPP-%s.exe` i dystrybucje `bpp-rootfs-%s.tar.gz`. Bez dostepu do GitHuba: pobierz wszystkie trzy pliki i poloz je w jednym folderze. Instrukcja: [README](https://github.com/%s#instalacja-krok-po-kroku).\n\nPlik nie jest podpisany: Windows SmartScreen pokaze ostrzezenie (Wiecej informacji -> Uruchom mimo to).\n\n```\n%s\n```\n' \
-              "$VERSION" "$IMAGE_TAG" "$VERSION" "$VERSION" "$VERSION" "$GITHUB_REPOSITORY" "$(cat dist/SHA256SUMS.txt)")"
+            notes="$(printf 'Instalator BPP dla Windows %s (obrazy BPP `%s`).\n\nPobierz `BPP-Setup-%s.exe` ponizej (maly plik, kilkadziesiat KB) i uruchom dwuklikiem — sam pobierze z tego wydania program `BPP-%s.exe` i dystrybucje `bpp-rootfs-%s.tar.gz`. Bez dostepu do GitHuba: pobierz wszystkie trzy pliki i poloz je w jednym folderze. Instrukcja: [README](https://github.com/%s#instalacja-krok-po-kroku).\n\nPlik nie jest podpisany: Windows SmartScreen pokaze ostrzezenie (Wiecej informacji -> Uruchom mimo to).\n\n[Code signing policy](https://github.com/%s#code-signing-policy) · [Polityka prywatnosci / Privacy policy](https://github.com/%s/blob/main/PRIVACY.md)\n\n```\n%s\n```\n' \
+              "$VERSION" "$IMAGE_TAG" "$VERSION" "$VERSION" "$VERSION" "$GITHUB_REPOSITORY" "$GITHUB_REPOSITORY" "$GITHUB_REPOSITORY" "$(cat dist/SHA256SUMS.txt)")"
             gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease $DRAFT \
               --title "BPP dla Windows $VERSION (testowe)" --notes "$notes"
           fi

@@ -50,6 +50,9 @@ wydania (`BPP-Setup-…`, `BPP-…`, `bpp-rootfs-…`), połóż je w jednym fol
 i uruchom `BPP-Setup-<wersja>.exe` z tego folderu. Instalator użyje plików
 z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
 
+[Code signing policy](#code-signing-policy) ·
+[Polityka prywatności / Privacy policy](PRIVACY.md)
+
 ## Wymagania
 
 - Windows 10 22H2 lub Windows 11, **64-bitowy (x64)** — komputery ARM nie są obsługiwane,
@@ -302,6 +305,31 @@ i PR): `dotnet test`, `dotnet build -c Release`, publish `BPP.exe` i smoke —
 jest budowana w tym workflow — robi to `release.yml` (wyżej).
 
 Lista kontrolna ręcznego testu na Windowsie: [docs/windows-checklist.md](docs/windows-checklist.md).
+
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io),
+certificate by [SignPath Foundation](https://signpath.org).
+
+Signed are only the files built from this repository by GitHub Actions
+([`.github/workflows/release.yml`](.github/workflows/release.yml)) and
+published in [Releases](https://github.com/iplweb/bpp-wsl/releases):
+`BPP-Setup-<version>.exe` and `BPP-<version>.exe`. Each signing request is
+approved manually.
+
+*Podpisywane są wyłącznie pliki zbudowane z kodu tego repozytorium przez
+GitHub Actions i opublikowane w Releases. Każdy podpis jest zatwierdzany
+ręcznie.*
+
+**Team roles / Zespół**
+
+- Committers and reviewers: [Michał Pasternak](https://github.com/mpasternak)
+- Approvers: [Michał Pasternak](https://github.com/mpasternak)
+
+**Privacy / Prywatność:** this program will not transfer any information to
+other networked systems unless specifically requested by the user or the
+person installing or operating it. It only downloads its own files (GitHub
+Releases, Docker Hub). See the [privacy policy](PRIVACY.md).
 
 ## Licencja
 
