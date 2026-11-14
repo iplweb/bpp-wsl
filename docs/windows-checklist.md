@@ -152,7 +152,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   Wynik:
 
 - [ ] **31.** Dane przykładowe: strona powitalna ma pole „Wypełnij BPP przykładowymi danymi”
-  i listę trzech motywów (lista aktywna dopiero po zaznaczeniu; licencja nadal czytelna).
+  — domyślnie zaznaczone — i listę trzech motywów, z wybranym losowo „Światem Stanisława
+  Lema” albo „Światem Wiedźmina” (przy kolejnych uruchomieniach instalatora trafiają się oba;
+  lista nieaktywna po odznaczeniu pola; licencja nadal czytelna).
   Po instalacji z motywem BPP ma uczelnię, autorów i publikacje z opisami bibliograficznymi,
   a kreator pyta tylko o konto administratora. Bez zaznaczenia baza jest pusta. Wybór
   przetrwa restart po włączeniu WSL (RunOnce z `--demo <motyw>`). „Spróbuj ponownie” nie

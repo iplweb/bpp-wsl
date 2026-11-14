@@ -15,5 +15,17 @@ public static class DemoThemes
         new Theme("wiedzmin", "Świat Wiedźmina"),
     };
 
+    /// <summary>The themes one of which the installer preselects at random: the fictional worlds.</summary>
+    public static readonly IReadOnlyList<string> PreselectedKeys = new[] { "lem", "wiedzmin" };
+
+    /// <summary>Index in <see cref="All"/> of the theme to preselect: one of <see cref="PreselectedKeys"/>, at random.</summary>
+    public static int PreselectedIndex(Random random)
+    {
+        var key = PreselectedKeys[random.Next(PreselectedKeys.Count)];
+        for (var i = 0; i < All.Count; i++)
+            if (All[i].Key == key) return i;
+        throw new InvalidOperationException($"Motyw danych demo „{key}” nie jest na liście.");
+    }
+
     public static bool IsValid(string? key) => key != null && All.Any(t => t.Key == key);
 }

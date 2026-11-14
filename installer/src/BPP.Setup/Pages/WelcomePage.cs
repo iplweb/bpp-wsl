@@ -2,7 +2,7 @@ namespace BPP.Setup.Pages;
 
 /// <summary>
 /// Test-installation notice, the BPP MIT licence and its acceptance ("Zainstaluj" needs the checkbox), and the
-/// optional demo data with its theme.
+/// optional demo data with its theme (on by default, with Lem's or the Witcher's world picked at random).
 /// </summary>
 internal sealed class WelcomePage : Page
 {
@@ -35,10 +35,11 @@ internal sealed class WelcomePage : Page
         };
         AddRow(accept);
 
-        // optional demo data: BPP's own generator, run once at the first start
+        // optional demo data: BPP's own generator, run once at the first start; on unless the user unticks it
         var demo = new CheckBox
         {
             Text = "Wypełnij BPP przykładowymi danymi:",
+            Checked = true,
             AutoSize = true,
             Margin = new Padding(0, 4, 6, 0),
         };
@@ -46,11 +47,10 @@ internal sealed class WelcomePage : Page
         {
             DropDownStyle = ComboBoxStyle.DropDownList,
             Width = 260,
-            Enabled = false,
             Margin = new Padding(0, 1, 0, 0),
         };
         foreach (var t in BPP.Core.DemoThemes.All) theme.Items.Add(t.Label);
-        theme.SelectedIndex = 0;
+        theme.SelectedIndex = BPP.Core.DemoThemes.PreselectedIndex(Random.Shared);
         demo.CheckedChanged += (_, _) => theme.Enabled = demo.Checked;
         var demoRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
         demoRow.Controls.Add(demo);
