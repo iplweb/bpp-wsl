@@ -1,4 +1,3 @@
-# Nieprzetestowane: repo nie ma jeszcze zdalnego GitHuba (patrz README.md).
 name: build
 
 on:

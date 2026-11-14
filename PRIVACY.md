@@ -19,7 +19,7 @@ Wyłącznie po to, żeby pobrać pliki potrzebne do instalacji i uruchomienia:
 | Dokąd | Po co | Kiedy |
 |---|---|---|
 | GitHub Releases (`github.com/iplweb/bpp-wsl`) | pobranie `BPP-<wersja>.exe` i `bpp-rootfs-<wersja>.tar.gz` | podczas instalacji, chyba że pliki leżą obok instalatora |
-| Docker Hub (`hub.docker.com`) | pobranie obrazów BPP (`iplweb/bpp_*`) oraz PostgreSQL, Redis i nginx | przy pierwszym uruchomieniu BPP |
+| Docker Hub (`hub.docker.com`) | pobranie obrazów BPP (`iplweb/bpp_*`) oraz PostgreSQL, Redis i nginx | podczas instalacji (oraz przy uruchomieniu BPP, gdyby obrazu brakowało) |
 | Microsoft (Windows Update, Microsoft Store) | włączenie lub aktualizacja WSL, robione przez sam Windows | tylko gdy WSL trzeba włączyć |
 
 Te serwisy widzą standardowe dane każdego połączenia sieciowego (adres IP,
@@ -69,7 +69,7 @@ operation need:
   `bpp-rootfs-<version>.tar.gz`, during installation, unless the files lie
   next to the installer;
 - **Docker Hub**: BPP images (`iplweb/bpp_*`) plus PostgreSQL, Redis and
-  nginx, on the first start;
+  nginx, during installation (and when BPP starts, should an image be missing);
 - **Microsoft** (Windows Update / Microsoft Store): enabling or updating
   WSL, done by Windows itself, only when WSL has to be enabled.
 

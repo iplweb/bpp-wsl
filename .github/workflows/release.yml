@@ -44,8 +44,16 @@ jobs:
           global-json-file: installer/global.json
 
       - name: Parametry
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${VERSION#v}"
+          # Istniejacego wydania nie budujemy ponownie: rootfs nie jest powtarzalny, wiec nowe pliki mialyby inne
+          # sumy SHA-256 niz te wkompilowane w rozdane juz BPP-Setup-<wersja>.exe. Poprawka = nowy numer wersji.
+          if gh release view "v$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::Wydanie v$VERSION juz istnieje. Uzyj nowego numeru wersji (albo usun szkic wydania)." >&2
+            exit 1
+          fi
           if [[ -z "$IMAGE_TAG" ]]; then
             echo "::error::Brak tagu obrazow: ustaw zmienna repo BPP_IMAGE_TAG albo podaj image_tag." >&2
             exit 1
@@ -77,12 +85,35 @@ jobs:
           DRAFT: ${{ inputs.draft && '--draft' || '' }}
         run: |
           tag="v$VERSION"
+          # Wersja N.N.N to zwykle wydanie ("latest" na GitHubie pomija pre-release i szkice); wersja z sufiksem
+          # (np. 0.3.0-rc1) wychodzi jako pre-release.
+          PRE=""
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then PRE="--prerelease"; fi
           files=("dist/BPP-Setup-$VERSION.exe" "dist/BPP-$VERSION.exe" "dist/bpp-rootfs-$VERSION.tar.gz" dist/SHA256SUMS.txt)
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" "${files[@]}" --clobber
-          else
-            notes="$(printf 'Instalator BPP dla Windows %s (obrazy BPP `%s`).\n\nPobierz `BPP-Setup-%s.exe` ponizej (maly plik, kilkadziesiat KB) i uruchom dwuklikiem — sam pobierze z tego wydania program `BPP-%s.exe` i dystrybucje `bpp-rootfs-%s.tar.gz`. Bez dostepu do GitHuba: pobierz wszystkie trzy pliki i poloz je w jednym folderze. Instrukcja: [README](https://github.com/%s#instalacja-krok-po-kroku).\n\nPlik nie jest podpisany: Windows SmartScreen pokaze ostrzezenie (Wiecej informacji -> Uruchom mimo to).\n\n[Polityka prywatnosci / Privacy policy](https://github.com/%s/blob/main/PRIVACY.md)\n\n```\n%s\n```\n' \
-              "$VERSION" "$IMAGE_TAG" "$VERSION" "$VERSION" "$VERSION" "$GITHUB_REPOSITORY" "$GITHUB_REPOSITORY" "$(cat dist/SHA256SUMS.txt)")"
-            gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" --prerelease $DRAFT \
-              --title "BPP dla Windows $VERSION (testowe)" --notes "$notes"
+          notes="$(printf 'Instalator BPP dla Windows %s (obrazy BPP `%s`).\n\nPobierz `BPP-Setup-%s.exe` ponizej (maly plik, kilkadziesiat KB) i uruchom dwuklikiem — sam pobierze z tego wydania program `BPP-%s.exe` i dystrybucje `bpp-rootfs-%s.tar.gz`. Bez dostepu do GitHuba: pobierz wszystkie trzy pliki i poloz je w jednym folderze. Instrukcja: [README](https://github.com/%s#instalacja-krok-po-kroku).\n\nPlik nie jest podpisany: Windows SmartScreen pokaze ostrzezenie (Wiecej informacji -> Uruchom mimo to).\n\n[Polityka prywatnosci / Privacy policy](https://github.com/%s/blob/main/PRIVACY.md)\n\n```\n%s\n```\n' \
+            "$VERSION" "$IMAGE_TAG" "$VERSION" "$VERSION" "$VERSION" "$GITHUB_REPOSITORY" "$GITHUB_REPOSITORY" "$(cat dist/SHA256SUMS.txt)")"
+          gh release create "$tag" "${files[@]}" --target "$GITHUB_SHA" $PRE $DRAFT \
+            --title "BPP dla Windows $VERSION (testowe)" --notes "$notes"
+
+      # Link "Pobierz" w README prowadzi prosto do BPP-Setup-<wersja>.exe (wersja w nazwie pliku), wiec po kazdym
+      # zwyklym wydaniu trzeba go przestawic. Nie dla szkicow i wersji z sufiksem (pre-release).
+      - name: README - link do nowego wydania
+        if: ${{ !inputs.draft }}
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Wersja $VERSION to pre-release: README bez zmian."
+            exit 0
           fi
+          git fetch origin "$DEFAULT_BRANCH"
+          git checkout -B readme-link "origin/$DEFAULT_BRANCH"
+          sed -i -E "/^\*\*\[⬇ Pobierz/ s#BPP-Setup-[0-9][^\`)]*\.exe#BPP-Setup-$VERSION.exe#g; /^\*\*\[⬇ Pobierz/ s#/releases/download/v[^/]+/#/releases/download/v$VERSION/#" README.md
+          if ! grep -qF "/releases/download/v$VERSION/BPP-Setup-$VERSION.exe" README.md; then
+            echo "::error::Nie znaleziono w README wiersza z linkiem 'Pobierz' - popraw link recznie." >&2
+            exit 1
+          fi
+          if git diff --quiet; then echo "README juz wskazuje v$VERSION."; exit 0; fi
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "docs: download link for v$VERSION" README.md
+          git push origin "HEAD:$DEFAULT_BRANCH"
