@@ -72,7 +72,8 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   „Pokaż terminal” rozwija go (czarne tło, białe litery, ok. 80 kolumn,
   do 25 wierszy — mniej na niskim ekranie, np. 1366×768; okno nie wychodzi poza ekran,
   także przy 150% DPI) razem ze wszystkim, co wypisano, zanim go pokazano, przewinięty
-  do końca; „Ukryj terminal” przywraca zwykłą wysokość. Widać w nim kroki instalatora,
+  do końca, pod wierszem przycisków („Pokaż/Ukryj terminal”, „Zapisz log do pliku…”
+  i po prawej „Anuluj” — w jednej linii, nie przesuwają się); „Ukryj terminal” przywraca zwykłą wysokość. Widać w nim kroki instalatora,
   a przy pierwszym starcie usług logi bazy i aplikacji (migracje). „Zapisz log do
   pliku…” działa także przy schowanym terminalu. Inne strony mają zwykłą wysokość okna.
   Wynik:

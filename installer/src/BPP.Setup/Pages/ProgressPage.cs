@@ -2,8 +2,8 @@ namespace BPP.Setup.Pages;
 
 /// <summary>
 /// The list of the four installation stages (done ✓, current in bold), step label with the current step's bar (the image being pulled; marquee when unknown), the whole-installation
-/// bar, "Pokaż terminal" / "Ukryj terminal" with "Zapisz log do pliku…", the terminal with the log (hidden until
-/// asked for; it collects the log either way), "Anuluj".
+/// bar, one row of controls — "Pokaż terminal" / "Ukryj terminal", "Zapisz log do pliku…" and, at the right
+/// edge, "Anuluj" — and below it the terminal with the log (hidden until asked for; it collects the log either way).
 /// </summary>
 internal sealed class ProgressPage : Page
 {
@@ -21,8 +21,11 @@ internal sealed class ProgressPage : Page
     private readonly Label[] _stages;
     private int _stage = -1;
 
-    /// <summary>With the terminal shown: room for about 25 rows on top of what the base window leaves.</summary>
-    public override int ExtraHeight => _terminalShown ? 340 : 0;
+    /// <summary>
+    /// The row of controls is the last thing on the page while the terminal is hidden, so the window is a little
+    /// lower than the base one; with the terminal shown there is room for about 25 rows below that row.
+    /// </summary>
+    public override int ExtraHeight => _terminalShown ? 300 : -40;
 
     /// <param name="heightChanged">Called after <see cref="ExtraHeight"/> changed, so the window can resize.</param>
     public ProgressPage(Action cancel, Action saveLog, Action heightChanged)
@@ -40,7 +43,14 @@ internal sealed class ProgressPage : Page
         _overall = new ProgressBar { Height = 22, Maximum = BarMax, Style = ProgressBarStyle.Continuous };
         _log = Terminal();
         _log.Visible = false;
-        _toggle = new Button { Text = ShowTerminalText, AutoSize = true, MinimumSize = new Size(130, 28), Margin = new Padding(0, 0, 14, 0) };
+        _toggle = new Button
+        {
+            Text = ShowTerminalText,
+            AutoSize = true,
+            MinimumSize = new Size(130, 30),
+            Anchor = AnchorStyles.Left,
+            Margin = new Padding(0, 0, 14, 0),
+        };
         _toggle.Click += (_, _) => ToggleTerminal();
         _cancel = Action("Anuluj", cancel);
 
@@ -50,15 +60,24 @@ internal sealed class ProgressPage : Page
         AddRow(_bar);
         AddRow(_overallLabel);
         AddRow(_overall);
-        // no Top/Bottom anchor: the flow panel centres the link on the button's height
+        // no Top/Bottom anchor: the row centres the link on the buttons' height
         var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0) };
         save.LinkClicked += (_, _) => saveLog();
-        var tools = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 12, 0, 4) };
-        tools.Controls.Add(_toggle);
-        tools.Controls.Add(save);
-        AddRow(tools);
+        _cancel.Anchor = AnchorStyles.Right;
+        _cancel.Margin = new Padding(0);
+
+        // one row: the terminal switch and the log link at the left, "Anuluj" at the right edge;
+        // the terminal opens below it, so these never move when it is shown or hidden
+        var controls = new TableLayoutPanel { AutoSize = true, ColumnCount = 4, RowCount = 1, Margin = new Padding(0, 14, 0, 6) };
+        controls.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        controls.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        controls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        controls.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        controls.Controls.Add(_toggle, 0, 0);
+        controls.Controls.Add(save, 1, 0);
+        controls.Controls.Add(_cancel, 3, 0);
+        AddRow(controls);
         AddRow(_log, fill: true);
-        AddButtons(_cancel);
     }
 
     private const string ShowTerminalText = "Pokaż terminal";
