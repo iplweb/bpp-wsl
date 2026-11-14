@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Buduje rootfs dystrybucji WSL: build/build-rootfs.sh <BPP_IMAGE_TAG>
 # Wynik: dist/bpp-rootfs.tar.gz (zwykly tar, gotowy do `wsl --import`).
+# Before the build it writes distro/rootfs/opt/bpp/image-layers.tsv (git-ignored): the sizes of the images
+# for this tag, which let `bpp-ctl init` report the download in megabytes (see build/image-layers.sh).
 set -euo pipefail
 
 if [[ $# -ne 1 || -z "$1" ]]; then
@@ -14,6 +16,10 @@ mkdir -p "$repo/dist"
 out="$repo/dist/bpp-rootfs.tar.gz"
 tmp="$out.part"
 trap 'rm -f "$tmp"' EXIT
+
+layers="$repo/distro/rootfs/opt/bpp/image-layers.tsv"
+"$repo/build/image-layers.sh" "$tag" > "$layers.part"
+mv "$layers.part" "$layers"
 
 docker buildx build --platform linux/amd64 \
   --build-arg "BPP_IMAGE_TAG=$tag" \

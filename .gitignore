@@ -2,5 +2,7 @@ dist/
 bin/
 obj/
 distro/rootfs/opt/bpp/state/
+distro/rootfs/opt/bpp/image-layers.tsv
+distro/rootfs/opt/bpp/image-layers.tsv.part
 distro/tests/.tmp/
 !distro/rootfs/opt/bpp/bin/

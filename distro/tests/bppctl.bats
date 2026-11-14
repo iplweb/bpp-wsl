@@ -456,3 +456,72 @@ _pull_fracs() {
   MOCK_DOCKER_INFO_FAILS=1000 run timeout 120 "$CTL" diag
   [ "$status" -eq 0 ]
 }
+
+# ---- megabytes in the pull messages (image-layers.tsv written at build time) ----
+
+# _layers_fixture - app and worker share layer a; MB = 1048576 bytes
+_layers_fixture() {
+  printf '%s\t%s\t%s\n' \
+    app:1 sha256:a 104857600 \
+    app:1 sha256:b 52428800 \
+    worker:1 sha256:a 104857600 \
+    worker:1 sha256:c 1048577 \
+    twin:1 sha256:a 104857600 >"$WORK/image-layers.tsv"
+}
+
+@test "pull jq reports downloaded bytes: finished layers in full, existing ones as nothing" {
+  run bash -c 'printf "%s\n" "$@" | { source "$BPP_HOME/lib/pull.sh"; jq -rn "$_PULL_JQ"; } | tail -1 | cut -d" " -f3' _ \
+    '{"id":"a","status":"Already exists"}' \
+    '{"id":"b","status":"Downloading","progressDetail":{"current":10,"total":100}}' \
+    '{"id":"c","status":"Downloading","progressDetail":{"current":40,"total":50}}' \
+    '{"id":"c","status":"Download complete"}'
+  [ "$output" = 60 ]
+}
+
+@test "new bytes of an image: its layers minus those of images already in Docker" {
+  _layers_fixture
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; _pull_new_bytes app:1; echo; _pull_new_bytes worker:1 app:1; echo; _pull_new_bytes twin:1 other:9 app:1; echo; _pull_new_bytes unknown:1; echo "[end]"'
+  [ "${lines[0]}" = 157286400 ]
+  [ "${lines[1]}" = 1048577 ]
+  [ "${lines[2]}" = 0 ]
+  [ "${lines[3]}" = "[end]" ]
+}
+
+@test "new bytes are unknown without the layers file" {
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; _pull_new_bytes app:1; echo "[end]"'
+  [ "$output" = "[end]" ]
+}
+
+@test "pull message carries megabytes only for a known, non-zero total" {
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; _pull_msg img 0 3; _pull_msg img 0 3 "" 5; _pull_msg img 0 3 0 0; _pull_msg img 1 3 1048577 1048575; _pull_msg img 2 3 314572800 10485760; _pull_msg img 2 3 1048576 9999999'
+  [ "${lines[0]}" = "Pobieranie obrazu img (1 z 3)" ]
+  [ "${lines[1]}" = "Pobieranie obrazu img (1 z 3)" ]
+  [ "${lines[2]}" = "Pobieranie obrazu img (1 z 3)" ]
+  [ "${lines[3]}" = "Pobieranie obrazu img (2 z 3), 0 MB z 2 MB" ]
+  [ "${lines[4]}" = "Pobieranie obrazu img (3 z 3), 10 MB z 300 MB" ]
+  [ "${lines[5]}" = "Pobieranie obrazu img (3 z 3), 1 MB z 1 MB" ]
+}
+
+@test "socket-path messages show megabytes that never go backwards" {
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; BPP_PULL_EMIT_INTERVAL=0; printf "P 0.1 10485760\nP 0.2 5242880\nP 0.5 157286400\n" | _pull_consume img 0 1 314572800'
+  [ "$status" -eq 0 ]
+  m=$(printf '%s\n' "${lines[@]}" | jq -sr 'map(.message | sub("^.*\\), "; ""))|join(";")')
+  [ "$m" = "10 MB z 300 MB;10 MB z 300 MB;150 MB z 300 MB" ]
+}
+
+@test "error text with spaces survives the socket path" {
+  run bash -c 'source "$BPP_HOME/lib/pull.sh"; printf "ERR pull access denied for x\n" | _pull_consume img 0 1 2>&1'
+  [ "$status" -eq 1 ]
+  [ "$output" = "docker pull img: pull access denied for x" ]
+}
+
+@test "init announces each image with the megabytes it will download" {
+  printf '%s\t%s\t%s\n' \
+    iplweb/bpp_appserver:t1 sha256:a 209715200 \
+    postgres:18.4 sha256:p 104857600 >"$WORK/image-layers.tsv"
+  run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  printf '%s\n' "${lines[@]}" | jq -se 'any(.[]; .message == "Pobieranie obrazu iplweb/bpp_appserver:t1 (1 z 3), 0 MB z 200 MB")'
+  printf '%s\n' "${lines[@]}" | jq -se 'any(.[]; .message == "Pobieranie obrazu postgres:18.4 (2 z 3), 0 MB z 100 MB")'
+  printf '%s\n' "${lines[@]}" | jq -se 'any(.[]; .message == "Pobieranie obrazu redis:8.6.2 (3 z 3)")'
+}
