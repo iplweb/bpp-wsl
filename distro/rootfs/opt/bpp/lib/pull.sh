@@ -11,23 +11,36 @@ source "$_PULL_LIB_DIR/state.sh"
 BPP_DOCKER_SOCK="${BPP_DOCKER_SOCK:-/var/run/docker.sock}"
 
 # Program jq: strumien JSON-ow z POST /images/create -> linie "P <ulamek>" / "ERR <tekst>".
-# Ulamek = suma pobranych bajtow / suma bajtow wszystkich dotad widzianych warstw.
+# Docker zapowiada wszystkie warstwy obrazu od razu ("Pulling fs layer"), ale rozmiar warstwy podaje dopiero,
+# gdy zaczyna ja pobierac (3 naraz). Dlatego licza sie WSZYSTKIE zapowiedziane warstwy: warstwa o jeszcze
+# nieznanym rozmiarze wazy tyle, co srednia znanych. (Liczenie tylko znanych dawalo 100% po pierwszej malej
+# warstwie i pasek stal tak do konca obrazu.) Pobranie warstwy to 90% jej wagi, rozpakowanie - reszta.
+# Stan warstwy: c/t - pobrane/wszystkie bajty (t=0: rozmiar nieznany), d - pobrana, x - rozpakowana.
 # shellcheck disable=SC2016 # to program jq, nie ekspansja shella
 _PULL_JQ='
 foreach inputs as $e ({l: {}};
   if ($e.error // null) != null then .err = $e.error
   else
-    ($e.id // "") as $id
-    | if $id != "" and $e.status == "Downloading" and ($e.progressDetail.total // 0) > 0
-      then .l[$id] = {c: $e.progressDetail.current, t: $e.progressDetail.total}
-      elif $id != "" and (.l[$id].t // 0) > 0
-        and ($e.status | IN("Download complete", "Verifying Checksum", "Extracting", "Pull complete", "Already exists"))
-      then .l[$id].c = .l[$id].t
+    ($e.id // "") as $id | ($e.status // "") as $s
+    | if $id == "" then .
+      elif $s == "Downloading" and ($e.progressDetail.total // 0) > 0
+      then .l[$id] = ((.l[$id] // {}) + {c: ($e.progressDetail.current // 0), t: $e.progressDetail.total})
+      elif ($s | IN("Pull complete", "Already exists"))
+      then .l[$id] = ((.l[$id] // {c: 0, t: 0}) + {d: true, x: true})
+      elif ($s | IN("Download complete", "Verifying Checksum", "Extracting"))
+      then .l[$id] = ((.l[$id] // {c: 0, t: 0}) + {d: true})
+      elif ($s | IN("Pulling fs layer", "Waiting")) and .l[$id] == null
+      then .l[$id] = {c: 0, t: 0}
       else . end
   end;
   if .err then "ERR \(.err)"
-  else ([.l[].t] | add // 0) as $t
-    | if $t > 0 then "P \(([.l[].c] | add) / $t)" else "P 0" end
+  else [.l[]] as $L
+    | [$L[] | select(.t > 0) | .t] as $known
+    | (if ($known | length) > 0 then ($known | add) / ($known | length) else 1 end) as $avg
+    | ([$L[] | if .t > 0 then .t else $avg end] | add // 0) as $total
+    | ([$L[] | (if .t > 0 then .t else $avg end) as $w
+        | if .x then $w elif .d then 0.9 * $w else 0.9 * ([.c, $w] | min) end] | add // 0) as $done
+    | if $total > 0 then "P \($done / $total)" else "P 0" end
   end)'
 
 _pull_use_socket() {

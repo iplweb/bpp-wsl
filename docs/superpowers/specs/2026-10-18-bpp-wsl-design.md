@@ -195,7 +195,7 @@ interfejsów WSL/Hyper-V). Z tego:
   `DJANGO_BPP_HOSTNAME=localhost` (wariant jedno/wielohostowy wybiera
   `bpp-ctl`; `127.0.0.1` jest już w `ALLOWED_HOSTS` na stałe),
 - certyfikat self-signed z SAN: `DNS:localhost`, `IP:127.0.0.1`, `IP:<IP…>`,
-  ważny np. 10 lat (to instancja testowa),
+  ważny 825 dni (limit urządzeń Apple), odnawiany przy starcie na 30 dni przed końcem,
 - `DJANGO_BPP_CSRF_EXTRA_ORIGINS` z `https://<host>:8443` dla każdego hosta
   (wymagane — `CSRF_TRUSTED_ORIGINS` z BPP nie ma portu; dodatkowo nginx
   przekazuje `Host` z portem, więc `Origin` zgadza się też z
@@ -467,7 +467,7 @@ budujący przygotowuje ją jako checklistę w `docs/`.
   pakiet WSL instaluje zwykły użytkownik.
 - Dostęp z LAN przez przekaźnik TCP wbudowany w ikonkę zamiast
   `netsh portproxy`.
-- Certyfikat self-signed ważny 10 lat.
+- Certyfikat self-signed ważny 825 dni, z EKU serverAuth (wymogi Apple), odnawiany automatycznie.
 - „Pokaż logi” dodane do menu; bez „Aktualizuj”.
 - Podpis kodu jako wyłączony krok builda.
 - Minimalne wymagania: odmowa < 8 GB RAM i < 25 GB dysku.

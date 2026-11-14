@@ -1,5 +1,17 @@
 # shellcheck shell=bash
-# Certyfikat self-signed (RSA 2048, 3650 dni) z SAN dla listy hostow.
+# Certyfikat self-signed (RSA 2048) z SAN dla listy hostow.
+# Wymogi Apple (macOS/iOS) wobec certyfikatow serwera TLS: waznosc <= 825 dni i EKU serverAuth;
+# bez tego Safari i inne przegladarki na urzadzeniach Apple w LAN moga odrzucic certyfikat bez
+# mozliwosci pominiecia ostrzezenia. Dlatego 825 dni + odnawianie (cert_needs_renewal).
+
+BPP_CERT_DAYS=825
+BPP_CERT_RENEW_BEFORE_DAYS=30
+
+# cert_needs_renewal <dir> -> 0 gdy <dir>/cert.pem wygasa w ciagu BPP_CERT_RENEW_BEFORE_DAYS dni
+# (albo juz wygasl / nie daje sie odczytac).
+cert_needs_renewal() {
+  ! openssl x509 -in "$1/cert.pem" -noout -checkend "$((BPP_CERT_RENEW_BEFORE_DAYS * 86400))" >/dev/null 2>&1
+}
 
 _CERT_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source-path=SCRIPTDIR source=hosts.sh
@@ -20,8 +32,8 @@ cert_generate() {
     esac
   done
   tmp="$(mktemp -d)" || return 1
-  if ! openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -subj /CN=localhost \
-    -addext "subjectAltName=$san" -keyout "$tmp/key.pem" -out "$tmp/cert.pem" 2>/dev/null; then
+  if ! openssl req -x509 -newkey rsa:2048 -nodes -days "$BPP_CERT_DAYS" -subj /CN=localhost \
+    -addext "subjectAltName=$san" -addext "extendedKeyUsage=serverAuth" -keyout "$tmp/key.pem" -out "$tmp/cert.pem" 2>/dev/null; then
     rm -rf "$tmp"
     return 1
   fi

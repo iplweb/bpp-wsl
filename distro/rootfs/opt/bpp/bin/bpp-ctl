@@ -96,12 +96,13 @@ parse_hosts() {
 }
 
 # ensure_hosts_config - certyfikat, state/hosts.env i state/hosts dla $HOSTS;
-# regeneruje tylko przy zmianie listy hostow albo braku plikow.
+# regeneruje tylko przy zmianie listy hostow, braku plikow albo zblizajacym sie koncu waznosci certyfikatu.
 # Ustawia CERT_CHANGED=1, gdy cos wygenerowano (init -> start: flaga przetrwa,
 # wiec nginx zostanie przeladowany, jesli juz dziala).
 CERT_CHANGED=0
 ensure_hosts_config() {
-  if state_hosts_changed "$HOSTS" || [ ! -f "$BPP_HOME/state/ssl/cert.pem" ] || [ ! -f "$BPP_HOME/state/hosts.env" ]; then
+  if state_hosts_changed "$HOSTS" || [ ! -f "$BPP_HOME/state/ssl/cert.pem" ] || [ ! -f "$BPP_HOME/state/hosts.env" ] ||
+    cert_needs_renewal "$BPP_HOME/state/ssl"; then
     CERT_CHANGED=1
     emit cert null "Generowanie certyfikatu dla: $HOSTS"
     cert_generate "$HOSTS" "$BPP_HOME/state/ssl" || fail "Nie udało się wygenerować certyfikatu"

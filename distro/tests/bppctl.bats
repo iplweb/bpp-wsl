@@ -59,6 +59,18 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ "$m1" = "$(md5sum "$WORK/state/ssl/cert.pem")" ]
 }
 
+@test "start regenerates a cert that is about to expire" {
+  run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  # podmiana na certyfikat wazny 10 dni (< 30 dni progu odnowienia)
+  bash -c 'source "$BPP_HOME/lib/cert.sh"; BPP_CERT_DAYS=10 cert_generate localhost "$BPP_HOME/state/ssl"'
+  m1=$(md5sum "$WORK/state/ssl/cert.pem")
+  run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$m1" != "$(md5sum "$WORK/state/ssl/cert.pem")" ]
+  openssl x509 -in "$WORK/state/ssl/cert.pem" -noout -checkend $((800 * 86400))
+}
+
 @test "start with new hosts regenerates cert and hosts.env" {
   "$CTL" init --hosts localhost >/dev/null 2>&1
   m1=$(md5sum "$WORK/state/ssl/cert.pem")
@@ -103,6 +115,48 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   PATH="$WORK/failbin:$PATH" run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
   [ "$status" -eq 1 ]
   [ ! -e "$WORK/state/.env" ]
+}
+
+# _pull_fracs <linie JSON> - ulamki "P" z programu jq dla strumienia zdarzen pobierania
+_pull_fracs() {
+  printf '%s\n' "$@" | bash -c 'source "$BPP_HOME/lib/pull.sh"; jq -rn "$_PULL_JQ"' | awk '{ printf "%.3f\n", $2 }'
+}
+
+@test "pull progress counts announced layers, so one small finished layer is not 100%" {
+  run _pull_fracs \
+    '{"status":"Pulling from library/x","id":"t1"}' \
+    '{"status":"Pulling fs layer","id":"a"}' \
+    '{"status":"Pulling fs layer","id":"b"}' \
+    '{"status":"Pulling fs layer","id":"c"}' \
+    '{"status":"Pulling fs layer","id":"d"}' \
+    '{"status":"Downloading","progressDetail":{"current":1000,"total":1000},"id":"a"}' \
+    '{"status":"Download complete","id":"a"}' \
+    '{"status":"Downloading","progressDetail":{"current":500,"total":1000},"id":"b"}'
+  [ "$status" -eq 0 ]
+  [ "${lines[4]}" = 0.000 ]  # tylko zapowiedzi warstw
+  [ "${lines[6]}" = 0.225 ]  # 1 z 4 warstw pobrana: 0.9 * 1/4, a nie 100%
+  [ "${lines[7]}" = 0.338 ]  # + polowa drugiej: 0.9 * 1.5/4
+}
+
+@test "pull progress: extraction is the last 10%, everything pulled or already present is 100%" {
+  run _pull_fracs \
+    '{"status":"Already exists","id":"a"}' \
+    '{"status":"Pulling fs layer","id":"b"}' \
+    '{"status":"Downloading","progressDetail":{"current":1000,"total":1000},"id":"b"}' \
+    '{"status":"Download complete","id":"b"}' \
+    '{"status":"Extracting","progressDetail":{"current":10,"total":1000},"id":"b"}' \
+    '{"status":"Pull complete","id":"b"}' \
+    '{"status":"Digest: sha256:abc"}'
+  [ "$status" -eq 0 ]
+  [ "${lines[3]}" = 0.950 ]
+  [ "${lines[4]}" = 0.950 ]
+  [ "${lines[5]}" = 1.000 ]
+  [ "${lines[6]}" = 1.000 ]
+}
+
+@test "pull progress: error event becomes ERR" {
+  run bash -c 'printf "%s\n" "{\"error\":\"boom\"}" | { source "$BPP_HOME/lib/pull.sh"; jq -rn "$_PULL_JQ"; }'
+  [ "$output" = "ERR boom" ]
 }
 
 @test "socket-path progress never goes backwards" {
