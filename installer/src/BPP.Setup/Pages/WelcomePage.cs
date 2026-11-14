@@ -24,7 +24,7 @@ internal sealed class WelcomePage : Page
         {
             Text = "Akceptuję warunki licencji MIT, w tym brak gwarancji i wyłączenie odpowiedzialności autora",
             AutoSize = true,
-            MaximumSize = new Size(500, 0),
+            MaximumSize = new Size(Width80, 0),
             Margin = new Padding(0, 8, 0, 4),
         };
         AddRow(accept);

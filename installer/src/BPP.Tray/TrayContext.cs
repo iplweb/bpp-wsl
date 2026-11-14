@@ -74,6 +74,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             open,
             new ToolStripMenuItem("Pokaż logi", null, (_, _) => ShowLogs()),
+            new ToolStripMenuItem("Terminal", null, (_, _) => OpenTerminal()),
             new ToolStripMenuItem("Wyślij diagnostykę do IPLweb…", null, (_, _) => SendDiagnostics(null)),
             _share,
             new ToolStripSeparator(),
@@ -208,6 +209,13 @@ internal sealed class TrayContext : ApplicationContext
     private async Task ShareOnLanAsync()
     {
         if (_closing) return;
+        if (MessageBox.Show(
+                "Aby BPP było widoczne z innych komputerów w sieci lokalnej, trzeba dodać regułę zapory Windows " +
+                "(port 8443).\n\nPo kliknięciu OK Windows pokaże okno administratora z pytaniem o zgodę. Aplikacja " +
+                "nazywa się tam „Network Command Shell” (wydawca: Microsoft Windows) — to systemowe narzędzie do " +
+                "ustawień sieci. Kliknij w nim „Tak”.",
+                "BPP — udostępnianie w sieci lokalnej", MessageBoxButtons.OKCancel, MessageBoxIcon.Information)
+            != DialogResult.OK) return;
         _share.Enabled = false;
         int? code;
         try
@@ -277,6 +285,22 @@ internal sealed class TrayContext : ApplicationContext
         };
         _logsForm = form;
         form.Show();
+    }
+
+    /// <summary>A root shell in the BPP distro, in its own console window; not while closing (it would boot the VM).</summary>
+    private void OpenTerminal()
+    {
+        if (_closing) return;
+        try
+        {
+            WslClient.OpenTerminal();
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            Log("Terminal: " + ex.Message);
+            MessageBox.Show("Nie udało się otworzyć terminala: " + ex.Message, "BPP", MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
     }
 
     /// <summary>

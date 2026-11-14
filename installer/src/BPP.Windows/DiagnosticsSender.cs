@@ -40,7 +40,7 @@ public static class DiagnosticsSender
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            MessageBox.Show(owner, "Nie udało się przygotować diagnostyki: " + ex.Message, Caption,
+            MessageBox.Show(Alive(owner), "Nie udało się przygotować diagnostyki: " + ex.Message, Caption,
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
@@ -51,7 +51,7 @@ public static class DiagnosticsSender
             _busy = false;
         }
 
-        MessageBox.Show(owner,
+        MessageBox.Show(Alive(owner),
             $"Zapisano plik:\n{zip}\n\n" +
             $"Teraz otworzy się nowa wiadomość do {SupportMail.Address} i okno z tym plikiem. " +
             "Dołącz plik do wiadomości (np. przeciągnij go do okna wiadomości), opisz krótko problem i kliknij Wyślij.\n\n" +
@@ -65,7 +65,7 @@ public static class DiagnosticsSender
                       ?? typeof(DiagnosticsSender).Assembly.GetName().Version?.ToString(3) ?? "?";
         if (!Start(SupportMail.MailtoUri(Path.GetFileName(zip), version.Split('+')[0]), null))
         {
-            MessageBox.Show(owner,
+            MessageBox.Show(Alive(owner),
                 $"Nie udało się otworzyć programu pocztowego. Wyślij plik {Path.GetFileName(zip)} na adres " +
                 $"{SupportMail.Address} (adres skopiowano do schowka).",
                 Caption, MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -73,6 +73,13 @@ public static class DiagnosticsSender
             catch (System.Runtime.InteropServices.ExternalException) { }
         }
     }
+
+    /// <summary>
+    /// The owner for a message box shown after an await: the window that started the collection (a log window)
+    /// may have been closed meanwhile, and a disposed owner makes MessageBox.Show throw.
+    /// </summary>
+    private static IWin32Window? Alive(IWin32Window? owner)
+        => owner is Control { IsDisposed: true } or Control { IsHandleCreated: false } ? null : owner;
 
     private static bool Start(string target, string? args)
     {

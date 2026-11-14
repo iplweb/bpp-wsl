@@ -7,7 +7,10 @@ internal abstract class Page : UserControl
 {
     private static readonly Font TitleFont = new((SystemFonts.MessageBoxFont ?? DefaultFont).FontFamily, 13f, FontStyle.Bold);
     protected static readonly Font BoldFont = new(SystemFonts.MessageBoxFont ?? DefaultFont, FontStyle.Bold);
-    private static readonly Font LogFont = new(FontFamily.GenericMonospace, 8.5f);
+    private static readonly Font TerminalFont = new("Consolas", 9f); // falls back to the default font if missing
+
+    /// <summary>Content width (96-DPI units): 80 terminal columns of Consolas 9 pt plus the scroll bar.</summary>
+    protected const int Width80 = 560;
 
     private readonly TableLayoutPanel _layout;
     private readonly FlowLayoutPanel _buttons;
@@ -58,7 +61,7 @@ internal abstract class Page : UserControl
     {
         Text = text,
         AutoSize = true,
-        MaximumSize = new Size(500, 0),
+        MaximumSize = new Size(Width80, 0),
         Margin = new Padding(0, 0, 0, 8),
     };
 
@@ -73,85 +76,25 @@ internal abstract class Page : UserControl
         return b;
     }
 
+    /// <summary>How much taller than the base window this page wants to be (96-DPI units); the form clamps it to the screen.</summary>
+    public virtual int ExtraHeight => 0;
+
     /// <summary>
-    /// Read-only monospace log box (hidden until "Szczegóły" is clicked). Long lines wrap: the wizard window is
-    /// narrow, and a horizontal scroll bar would eat a line of an already small box.
+    /// The "terminal": white monospace text on black, 80 columns wide, showing what the installer and the services
+    /// print. Long lines wrap; it scrolls vertically.
     /// </summary>
-    protected static TextBox LogBox() => new()
+    protected static TextBox Terminal() => new()
     {
         Multiline = true,
         ReadOnly = true,
         WordWrap = true,
         ScrollBars = ScrollBars.Vertical,
-        Font = LogFont,
+        Font = TerminalFont,
+        BackColor = Color.Black,
+        ForeColor = Color.White,
+        BorderStyle = BorderStyle.FixedSingle,
         MaxLength = 0,
-        Visible = false,
+        TabStop = false,
+        Margin = new Padding(0, 4, 0, 4),
     };
-
-    private Control? _details;
-    private LinkLabel? _detailsLink;
-    private int _detailsGrowBy;
-    private bool _detailsShown; // own state: Control.Visible also reflects the parents, so it is not a reliable toggle
-    private int _collapsedHeight; // window height before the details were opened; 0 = not opened
-
-    /// <summary>
-    /// A "Szczegóły ▸ / ▾" link that shows and hides <paramref name="target"/>; showing it makes the window
-    /// <paramref name="growBy"/> (96-DPI units) taller instead of squeezing the page, hiding shrinks it back.
-    /// </summary>
-    protected LinkLabel DetailsToggle(Control target, int growBy)
-    {
-        var link = new LinkLabel { Text = "Szczegóły ▸", AutoSize = true, Margin = new Padding(0, 6, 0, 4) };
-        _details = target;
-        _detailsLink = link;
-        _detailsGrowBy = growBy;
-        link.LinkClicked += (_, _) => SetDetailsVisible(!_detailsShown);
-        return link;
-    }
-
-    /// <summary>Called before the page is (re)shown in a window of base height: details start collapsed.</summary>
-    public void CollapseDetails()
-    {
-        if (_details == null || _detailsLink == null) return;
-        _details.Visible = false;
-        _detailsLink.Text = "Szczegóły ▸";
-        _detailsShown = false;
-        _collapsedHeight = 0; // the window is already back at its base height
-    }
-
-    private void SetDetailsVisible(bool visible)
-    {
-        if (_details == null || _detailsLink == null || _detailsShown == visible) return;
-        _detailsShown = visible;
-        _detailsLink.Text = visible ? "Szczegóły ▾" : "Szczegóły ▸";
-        var form = FindForm();
-        if (form == null)
-        {
-            _details.Visible = visible;
-            return;
-        }
-
-        form.SuspendLayout();
-        try
-        {
-            if (visible)
-            {
-                // remember the exact height to return to, instead of subtracting the same amount later
-                _collapsedHeight = form.Height;
-                form.Height = _collapsedHeight + LogicalToDeviceUnits(_detailsGrowBy);
-                _details.Visible = true;
-            }
-            else
-            {
-                _details.Visible = false;
-                if (_collapsedHeight > 0) form.Height = _collapsedHeight;
-                _collapsedHeight = 0;
-            }
-        }
-        finally
-        {
-            form.ResumeLayout(performLayout: true);
-        }
-        var area = Screen.FromControl(form).WorkingArea;
-        if (form.Bottom > area.Bottom) form.Top = Math.Max(area.Top, area.Bottom - form.Height);
-    }
 }

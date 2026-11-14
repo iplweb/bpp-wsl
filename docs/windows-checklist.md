@@ -66,10 +66,10 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   okno się zamyka (podczas pobierania BPP najpierw zatrzymuje kontenery; drugie
   zamknięcie nie czeka). Ponowne uruchomienie instalatora dokańcza instalację.
   Wynik:
-- [ ] **15.** (0.1.1) „Szczegóły ▸” wydłuża okno w dół (nie ściska strony),
-  „Szczegóły ▾” przywraca wysokość (także po kilku rozwinięciach z rzędu); pole logu
-  zawija długie wiersze i nie ma poziomego paska przewijania; przy 150% DPI okno nie
-  wychodzi poza ekran.
+- [ ] **15.** Strona postępu ma stały terminal (czarne tło, białe litery, ok. 80 kolumn,
+  do 25 wierszy — mniej na niskim ekranie, np. 1366×768; okno nie wychodzi poza ekran,
+  także przy 150% DPI). Widać w nim kroki instalatora, a przy pierwszym starcie usług
+  logi bazy i aplikacji (migracje). Inne strony wracają do zwykłej wysokości okna.
   Wynik:
 - [ ] **16.** (0.1.2) Dwa paski: górny pokazuje bieżący obraz („Pobieranie obrazu
   … (3 z 7)”, od 0 do 100% dla każdego obrazu; przy innych krokach animacja),
@@ -123,6 +123,25 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   Wynik:
 - [ ] **26.** Górny pasek przy pobieraniu obrazu rośnie stopniowo (nie skacze z 0 na 100%
   po pierwszej małej warstwie); ostatnie ~10% to rozpakowywanie warstw.
+  Wynik:
+
+- [ ] **27.** „Gotowe” pojawia się dopiero, gdy działają wszystkie usługi (log: ewentualne
+  „Uruchamianie usług w tle: …”; po 3 min bez workera instalacja i tak się kończy).
+  Adres na stronie „Gotowe” jest klikalny i otwiera BPP; ikonka w zasobniku jest już
+  widoczna, zanim zamkniesz instalator.
+  Wynik:
+- [ ] **28.** Menu ikonki → „Terminal”: otwiera się okno konsoli z powłoką root w
+  dystrybucji BPP, w katalogu `/opt/bpp`; `bpp-ctl compose ps` działa.
+  Wynik:
+
+- [ ] **29.** „Odinstaluj” pyta dwa razy (oba pytania domyślnie „Nie”); przed oknem
+  administratora „Network Command Shell” (usunięcie reguły zapory) jest komunikat z OK;
+  bez reguły zapory nie ma ani komunikatu, ani UAC. To samo przed „Udostępnij w sieci
+  lokalnej…” z menu ikonki (OK / Anuluj).
+  Wynik:
+- [ ] **30.** „Wyślij diagnostykę” z okna logów ikonki, okno logów zamknięte w trakcie
+  zbierania: brak wyjątku „Cannot access a disposed object”, komunikaty pokazują się
+  bez okna-właściciela.
   Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)

@@ -41,6 +41,7 @@ public static class InstallProgress
         "pull" => PullStart + (PullEnd - PullStart) * Math.Clamp(ev.Progress ?? 0, 0, 1),
         "start" => PullEnd,
         "migrate" => 0.88,
+        "services" => 0.92,
         "ready" => 0.95,
         _ => InitStart,
     };

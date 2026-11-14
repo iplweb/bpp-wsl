@@ -78,7 +78,9 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
    bo program nie jest jeszcze podpisany.)
 3. Kliknij **Zainstaluj**. Instalator pokaże listę czterech etapów (włączenie
    WSL, aktualizacja WSL, pobranie dystrybucji BPP, instalacja i uruchomienie
-   BPP) z zaznaczonym bieżącym etapem oraz paski postępu.
+   BPP) z zaznaczonym bieżącym etapem, paski postępu oraz czarne okno
+   terminala, w którym widać, co się dzieje (także logi usług BPP przy
+   pierwszym starcie).
    Zanim Windows pokaże własne okno (zgoda administratora, czarne okno
    konsoli), instalator zawsze najpierw mówi, co się zaraz stanie, i czeka na
    **OK**.
@@ -94,7 +96,9 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
 7. Na koniec instalator zapowie, a Windows zapyta o zgodę na **regułę zapory** — zgódź się,
    jeśli BPP ma być widoczne z innych komputerów w sieci. Odmowa nie psuje
    instalacji: BPP będzie wtedy dostępne tylko na tym komputerze.
-8. Kliknij **Otwórz BPP**.
+8. Instalator czeka, aż wstaną wszystkie usługi, i dopiero wtedy pokazuje
+   „Gotowe” z klikalnym adresem. Kliknij adres albo **Otwórz BPP**. Ikonka BPP
+   jest już wtedy w zasobniku.
 
 Instalację można w każdej chwili przerwać przyciskiem **Anuluj** lub
 krzyżykiem i dokończyć później, uruchamiając instalator ponownie.
@@ -120,13 +124,18 @@ Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
 |---|---|
 | **Otwórz BPP** | otwiera BPP w przeglądarce |
 | **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów; **Zapisz do pliku…** zapisuje go jako plik tekstowy |
+| **Terminal** | otwiera konsolę Linuksa (root) w dystrybucji BPP, w katalogu `/opt/bpp` — do ręcznych napraw (`bpp-ctl compose ps` itd.) |
 | **Udostępnij w sieci lokalnej…** | dodaje regułę zapory, gdy wcześniej jej odmówiono |
 | **Zatrzymaj** | wyłącza BPP i zwalnia pamięć |
 | **Odinstaluj** | usuwa BPP razem z danymi |
 
 ## Odinstalowanie
 
-Menu ikonki → **Odinstaluj** albo **Ustawienia → Aplikacje → BPP**.
+Menu ikonki → **Odinstaluj** albo **Ustawienia → Aplikacje → BPP**. Program
+pyta dwa razy, bo usuwa dane. Na koniec Windows może poprosić o zgodę
+administratora dla aplikacji „Network Command Shell” (systemowy `netsh`) — to
+usunięcie reguły zapory dodanej przy instalacji; program uprzedza o tym
+komunikatem.
 **Wszystkie dane testowe zostaną usunięte bezpowrotnie.** Instalacja nowszej
 wersji również zaczyna od czystej bazy.
 

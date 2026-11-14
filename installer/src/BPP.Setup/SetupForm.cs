@@ -24,7 +24,6 @@ internal sealed class SetupForm : Form
     private bool _closeWhenFinished;
     private bool _forceClose;
     private int _baseHeight;
-    private bool _launchTray;
 
     public SetupForm(AppArgs args)
     {
@@ -41,7 +40,7 @@ internal sealed class SetupForm : Form
         // Layout is in 96-DPI units; WinForms scales the window and pages at 125–150 % DPI.
         AutoScaleDimensions = new SizeF(96F, 96F);
         AutoScaleMode = AutoScaleMode.Dpi;
-        ClientSize = new Size(560, 500);
+        ClientSize = new Size(608, 500); // 80 terminal columns + page padding
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
@@ -216,7 +215,8 @@ internal sealed class SetupForm : Form
 
     public void ShowDone(bool lanEnabled)
     {
-        _launchTray = true;
+        // the tray starts now, not when this window closes: the icon is there while the user reads the page
+        LaunchTray();
         ShowPage(new DonePage(lanEnabled, OpenBpp, Close));
     }
 
@@ -239,10 +239,11 @@ internal sealed class SetupForm : Form
     /// <summary>Replaces the current page; the progress page is kept (its log survives a retry).</summary>
     private void ShowPage(Control page)
     {
-        // a page left with "Szczegóły" open made the window taller: every page starts at the base height
+        // every page gets the base height plus what it asks for (the progress page: its terminal), within the screen
         if (_baseHeight == 0) _baseHeight = Height;
-        else Height = _baseHeight;
-        (page as Pages.Page)?.CollapseDetails();
+        var area = Screen.FromControl(this).WorkingArea;
+        Height = Math.Min(_baseHeight + LogicalToDeviceUnits((page as Pages.Page)?.ExtraHeight ?? 0), area.Height);
+        if (Bottom > area.Bottom) Top = Math.Max(area.Top, area.Bottom - Height);
         var old = _content.Controls.Cast<Control>().ToList();
         _content.Controls.Clear();
         _content.Controls.Add(page);
@@ -287,12 +288,6 @@ internal sealed class SetupForm : Form
     {
         _forceClose = true;
         BeginInvoke(Close);
-    }
-
-    protected override void OnFormClosed(FormClosedEventArgs e)
-    {
-        if (_launchTray) LaunchTray();
-        base.OnFormClosed(e);
     }
 
     private void OpenBpp() => OpenUrl(BppUrl);

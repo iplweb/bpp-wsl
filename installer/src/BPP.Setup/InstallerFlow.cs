@@ -172,8 +172,9 @@ internal sealed class InstallerFlow
                     "BPP potrzebuje składnika Windows o nazwie WSL (Podsystem Windows dla systemu Linux), który " +
                     "na tym komputerze nie jest jeszcze włączony.\n\n" +
                     "Po kliknięciu OK Windows pokaże okno administratora z pytaniem „Czy chcesz zezwolić tej " +
-                    "aplikacji na wprowadzanie zmian na tym urządzeniu?” (narzędzie Windows DISM, wydawca: " +
-                    "Microsoft Windows). Kliknij w nim „Tak” — na koncie bez uprawnień administratora Windows " +
+                    "aplikacji na wprowadzanie zmian na tym urządzeniu?”. Aplikacja nazywa się tam „Dism Image " +
+                    "Servicing Utility” (wydawca: Microsoft Windows) — to systemowe narzędzie do włączania " +
+                    "składników Windows. Kliknij w nim „Tak” — na koncie bez uprawnień administratora Windows " +
                     "poprosi o hasło administratora.\n\n" +
                     "Potem pojawi się czarne okno z postępem włączania. Nie zamykaj go — zamknie się samo. " +
                     "Na koniec instalator poprosi o ponowne uruchomienie komputera.");
@@ -243,8 +244,10 @@ internal sealed class InstallerFlow
                     {
                         _ui.Announce("Ostatni krok: dostęp z sieci lokalnej",
                             "BPP jest już zainstalowane i działa na tym komputerze.\n\n" +
-                            "Po kliknięciu OK Windows pokaże okno administratora z pytaniem o zgodę na dodanie " +
-                            "reguły zapory (program netsh, wydawca: Microsoft Windows).\n\n" +
+                            "Po kliknięciu OK Windows pokaże okno administratora z pytaniem o zgodę. Aplikacja " +
+                            "nazywa się tam „Network Command Shell” (wydawca: Microsoft Windows) — to systemowe " +
+                            "narzędzie, którym instalator dodaje regułę zapory dla BPP (port 8443). O nic " +
+                            "innego nie prosi.\n\n" +
                             "• „Tak” — BPP będzie dostępne także z innych komputerów w sieci lokalnej.\n" +
                             "• „Nie” — BPP będzie dostępne tylko na tym komputerze. Instalacja i tak zakończy " +
                             "się poprawnie, a dostęp z sieci można włączyć później z menu ikonki BPP.");

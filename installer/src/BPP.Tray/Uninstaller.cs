@@ -51,11 +51,22 @@ internal static class Uninstaller
         }
     }
 
+    /// <summary>Two confirmations (both default to "Nie"): the uninstall deletes the user's data for good.</summary>
     public static bool Confirm()
-        => MessageBox.Show(
-            "Odinstalować BPP?\n\nZostaną usunięte program, dystrybucja WSL „BPP” i wszystkie dane testowe.",
-            Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
-           == DialogResult.Yes;
+    {
+        if (MessageBox.Show(
+                "Odinstalować BPP?\n\nZostaną usunięte program, dystrybucja WSL „BPP” i wszystkie dane testowe.",
+                Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+            != DialogResult.Yes) return false;
+        return MessageBox.Show(
+                   "Na pewno usunąć BPP razem ze WSZYSTKIMI danymi?\n\n" +
+                   "Baza danych BPP (publikacje, autorzy, konta, wgrane pliki) zostanie skasowana bezpowrotnie. " +
+                   "Tej operacji nie można cofnąć i nie ma kopii zapasowej.\n\n" +
+                   "Na koniec Windows może poprosić o zgodę administratora dla aplikacji „Network Command Shell” " +
+                   "— to usunięcie reguły zapory dodanej przy instalacji.",
+                   Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Warning, MessageBoxDefaultButton.Button2)
+               == DialogResult.Yes;
+    }
 
     /// <summary>
     /// Shows a progress window, uninstalls, then shows the summary. The caller removes the program directory only
@@ -157,8 +168,17 @@ internal static class Uninstaller
     {
         try
         {
-            // RemoveElevated checks RuleExists unelevated first and prompts only when the rule is there
-            var code = await Task.Run(() => new Firewall().RemoveElevated());
+            var firewall = new Firewall();
+            // no rule (LAN sharing was never approved): no administrator window, nothing to announce
+            if (!await Task.Run(firewall.RuleExists)) return;
+            MessageBox.Show(
+                "Ostatni krok: usunięcie reguły zapory Windows dodanej przy instalacji BPP (port 8443).\n\n" +
+                "Po kliknięciu OK Windows pokaże okno administratora z pytaniem o zgodę. Aplikacja nazywa się tam " +
+                "„Network Command Shell” (wydawca: Microsoft Windows) — to systemowe narzędzie do ustawień sieci. " +
+                "Kliknij „Tak”.\n\nJeśli odmówisz, reguła zostanie; jest nieszkodliwa i administrator może ją " +
+                "usunąć później w Zaporze Windows.",
+                Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
+            var code = await Task.Run(firewall.RemoveElevated);
             if (code == null)
                 problems.Add($"Reguła zapory „{AppPaths.FirewallRuleName}” została (brak zgody administratora). " +
                              "Jest nieszkodliwa; administrator może ją usunąć w Zaporze Windows.");

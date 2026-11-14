@@ -2,7 +2,7 @@ namespace BPP.Setup.Pages;
 
 /// <summary>
 /// The list of the four installation stages (done ✓, current in bold), step label with the current step's bar (the image being pulled; marquee when unknown), the whole-installation
-/// bar, collapsible log, "Anuluj".
+/// bar, the terminal with the log, "Zapisz log do pliku…", "Anuluj".
 /// </summary>
 internal sealed class ProgressPage : Page
 {
@@ -17,6 +17,9 @@ internal sealed class ProgressPage : Page
     private readonly Label[] _stages;
     private int _stage = -1;
 
+    /// <summary>Room for about 25 terminal rows on top of what the base window leaves.</summary>
+    public override int ExtraHeight => 320;
+
     public ProgressPage(Action cancel, Action saveLog)
     {
         _stages = BPP.Core.InstallStages.Names.Select(_ => Body("")).ToArray();
@@ -29,7 +32,7 @@ internal sealed class ProgressPage : Page
         _overallLabel = Body("Cała instalacja: 0%");
         _overallLabel.Margin = new Padding(0, 14, 0, 6);
         _overall = new ProgressBar { Height = 22, Maximum = BarMax, Style = ProgressBarStyle.Continuous };
-        _log = LogBox();
+        _log = Terminal();
         _cancel = Action("Anuluj", cancel);
 
         AddRow(Title("Instalowanie BPP"));
@@ -38,15 +41,10 @@ internal sealed class ProgressPage : Page
         AddRow(_bar);
         AddRow(_overallLabel);
         AddRow(_overall);
-        var links = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
-        var details = DetailsToggle(_log, growBy: 300);
-        details.Margin = new Padding(0, 6, 18, 4);
-        var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Margin = new Padding(0, 6, 0, 4) };
-        save.LinkClicked += (_, _) => saveLog();
-        links.Controls.Add(details);
-        links.Controls.Add(save);
-        AddRow(links);
         AddRow(_log, fill: true);
+        var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+        save.LinkClicked += (_, _) => saveLog();
+        AddRow(save);
         AddButtons(_cancel);
     }
 

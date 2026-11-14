@@ -13,7 +13,7 @@ public sealed class WslClient
 
     private static string WslExe => Path.Combine(Environment.SystemDirectory, "wsl.exe");
 
-    /// <summary>Receives bpp-ctl stderr lines and non-JSON stdout lines (for the "Szczegóły" pane).</summary>
+    /// <summary>Receives bpp-ctl stderr lines and non-JSON stdout lines (for the installer's terminal pane and the tray log).</summary>
     public event Action<string>? LogLine;
 
     public async Task<bool> IsWslReadyAsync()
@@ -47,6 +47,17 @@ public sealed class WslClient
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// "Terminal": a visible console with a root shell in the BPP distro, started in /opt/bpp (bpp-ctl, the
+    /// compose file, state/). For looking around and fixing things by hand.
+    /// </summary>
+    public static void OpenTerminal()
+    {
+        var psi = new ProcessStartInfo(WslExe) { UseShellExecute = true };
+        foreach (var a in new[] { "-d", AppPaths.DistroName, "-u", "root", "--cd", "/opt/bpp" }) psi.ArgumentList.Add(a);
+        using var _ = Process.Start(psi);
     }
 
     public async Task ImportAsync(string tarPath)
