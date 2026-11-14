@@ -54,7 +54,10 @@ internal sealed class LogsForm : Form
         };
         var send = new Button { Text = "Wyślij diagnostykę do IPLweb…", AutoSize = true };
         send.Click += (_, _) => sendDiagnostics(this);
+        var save = new Button { Text = "Zapisz do pliku…", AutoSize = true };
+        save.Click += (_, _) => LogFile.SaveAs(this, _text.Text, "BPP-log");
         buttons.Controls.Add(copy);
+        buttons.Controls.Add(save);
         buttons.Controls.Add(_refresh);
         buttons.Controls.Add(send);
 

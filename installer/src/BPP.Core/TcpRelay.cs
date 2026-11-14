@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.CompilerServices;
@@ -91,14 +92,21 @@ public sealed class RelaySet : IAsyncDisposable
     private static async Task SafeDisposeAsync(Listener l)
     {
         try { await l.DisposeAsync().ConfigureAwait(false); }
-        catch { /* keep disposing the remaining listeners */ }
+        catch (Exception ex) { LogUnexpected("closing a listener", ex); } // keep disposing the remaining listeners
     }
 
     private void RaiseBindFailed(IPAddress address, Exception ex)
     {
         try { BindFailed?.Invoke(address, ex); }
-        catch { /* a faulty subscriber must not break the relay */ }
+        catch (Exception subscriberEx) { LogUnexpected("BindFailed subscriber", subscriberEx); } // must not break the relay
     }
+
+    /// <summary>How a relayed connection normally ends: reset, EOF race, cancellation, socket closed under a read.</summary>
+    private static bool IsConnectionEnd(Exception ex)
+        => ex is SocketException or IOException or OperationCanceledException or InvalidOperationException;
+
+    /// <summary>The relay has no logger of its own; unexpected errors go to the trace listeners with their stack.</summary>
+    private static void LogUnexpected(string what, Exception ex) => Trace.TraceError($"BPP relay: {what}: {ex}");
 
     public async ValueTask DisposeAsync()
     {
@@ -187,7 +195,8 @@ public sealed class RelaySet : IAsyncDisposable
             Connection[] conns;
             lock (_connLock) conns = _connections.ToArray();
             foreach (var c in conns) c.Close();
-            try { await _acceptLoop.ConfigureAwait(false); } catch { }
+            try { await _acceptLoop.ConfigureAwait(false); }
+            catch (Exception ex) { LogUnexpected("accept loop", ex); } // the loop handles its expected errors itself
             foreach (var c in conns) await c.Completion.ConfigureAwait(false);
             _cts.Dispose();
         }
@@ -211,8 +220,9 @@ public sealed class RelaySet : IAsyncDisposable
 
         public void Close()
         {
-            try { _client.Close(); } catch { }
-            try { _upstream.Close(); } catch { }
+            // Close must never throw: it runs in RunAsync's finally and while a listener is being disposed
+            try { _client.Close(); } catch (Exception ex) { LogUnexpected("closing the client socket", ex); }
+            try { _upstream.Close(); } catch (Exception ex) { LogUnexpected("closing the upstream socket", ex); }
         }
 
         public async Task RunAsync(CancellationToken ct)
@@ -229,9 +239,13 @@ public sealed class RelaySet : IAsyncDisposable
                 Close();
                 await Task.WhenAll(Observe(t1), Observe(t2)).ConfigureAwait(false);
             }
-            catch
+            catch (Exception ex) when (IsConnectionEnd(ex))
             {
                 // connect failure, reset, cancellation: all just end the connection
+            }
+            catch (Exception ex)
+            {
+                LogUnexpected("connection", ex);
             }
             finally
             {
@@ -242,7 +256,9 @@ public sealed class RelaySet : IAsyncDisposable
 
         private static async Task Observe(Task t)
         {
-            try { await t.ConfigureAwait(false); } catch { }
+            try { await t.ConfigureAwait(false); }
+            catch (Exception ex) when (IsConnectionEnd(ex)) { /* the other direction ended first */ }
+            catch (Exception ex) { LogUnexpected("copy", ex); }
         }
     }
 }

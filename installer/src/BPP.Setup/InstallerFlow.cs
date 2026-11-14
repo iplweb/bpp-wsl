@@ -21,6 +21,11 @@ internal sealed class InstallerFlow
     private readonly string _setupExe;
     private readonly AppArgs _args;
     private string? _rootfsPath; // verified archive for wsl --import (set by DownloadRootfs)
+    // The rootfs download starts at the first CheckWsl and runs beside the WSL steps (DISM, wsl --update);
+    // the DownloadRootfs step only waits for it. Result: true = _rootfsPath is ready.
+    private Task<bool>? _rootfsTask;
+    private string _rootfsError = "";
+    private bool _rootfsInForeground; // the DownloadRootfs step is waiting: the download owns the status line
     private readonly WslClient _wsl = new();
     private readonly WindowsFeatures _features = new();
     private readonly Firewall _firewall = new();
@@ -97,6 +102,7 @@ internal sealed class InstallerFlow
                 }
                 _ui.AppendLog($"--- {step}");
                 _ui.SetOverall(InstallProgress.AtStart(step));
+                _ui.SetStage(InstallStages.Of(step));
                 _state = (await RunStepAsync(step)) with { Completed = step };
             }
         }
@@ -149,9 +155,11 @@ internal sealed class InstallerFlow
                 return s;
 
             case Step.DownloadRootfs:
-                return s with { RootfsReady = await DownloadRootfsAsync() };
+                return s with { RootfsReady = await WaitForRootfsAsync() };
 
             case Step.CheckWsl:
+                // no WSL needed to download: by the time WSL is enabled / updated the archive is usually there
+                StartRootfsDownload();
                 _ui.SetStatus("Sprawdzanie WSL…", null);
                 var ready = await _wsl.IsWslReadyAsync();
                 var hint = await Task.Run(_features.IsWslFeatureEnabled);
@@ -159,12 +167,29 @@ internal sealed class InstallerFlow
                 return s with { WslReady = ready, WslFeatureHint = hint };
 
             case Step.EnableWsl:
+                _ui.SetStatus("Włączanie WSL…", null);
+                _ui.Announce("Teraz: włączenie WSL",
+                    "BPP potrzebuje składnika Windows o nazwie WSL (Podsystem Windows dla systemu Linux), który " +
+                    "na tym komputerze nie jest jeszcze włączony.\n\n" +
+                    "Po kliknięciu OK Windows pokaże okno administratora z pytaniem „Czy chcesz zezwolić tej " +
+                    "aplikacji na wprowadzanie zmian na tym urządzeniu?” (narzędzie Windows DISM, wydawca: " +
+                    "Microsoft Windows). Kliknij w nim „Tak” — na koncie bez uprawnień administratora Windows " +
+                    "poprosi o hasło administratora.\n\n" +
+                    "Potem pojawi się czarne okno z postępem włączania. Nie zamykaj go — zamknie się samo. " +
+                    "Na koniec instalator poprosi o ponowne uruchomienie komputera.");
                 _ui.SetStatus("Włączanie WSL — potwierdź w oknie administratora (UAC)…", null);
                 _dismExitCode = await Task.Run(_features.EnableWslFeaturesElevated);
                 _ui.AppendLog("DISM: " + (_dismExitCode?.ToString() ?? "odmowa UAC"));
                 return s with { EnableWsl = InstallerPlan.ClassifyEnableWsl(_dismExitCode) };
 
             case Step.InstallWslPackage:
+                _ui.SetStatus("Aktualizowanie WSL…", null);
+                _ui.Announce("Teraz: aktualizacja WSL",
+                    "Windows musi pobrać i zainstalować aktualną wersję WSL.\n\n" +
+                    "Po kliknięciu OK pojawi się czarne okno konsoli z postępem pobierania. Nie zamykaj go — " +
+                    "zamknie się samo, zwykle po minucie lub dwóch.\n\n" +
+                    "Może też pojawić się okno administratora Windows z pytaniem o zgodę na wprowadzenie zmian " +
+                    "— kliknij w nim „Tak”.");
                 _ui.SetStatus("Aktualizowanie WSL — postęp widać w oknie konsoli (może pojawić się też okno " +
                               "administratora)…", null);
                 // the following CheckWsl / ImportDistro decide
@@ -209,9 +234,24 @@ internal sealed class InstallerFlow
                 return s;
 
             case Step.AddFirewall:
-                _ui.SetStatus("Udostępnianie w sieci lokalnej — potwierdź w oknie administratora (UAC)…", null);
+                _ui.SetStatus("Udostępnianie w sieci lokalnej…", null);
                 int? code;
-                try { code = await Task.Run(() => _firewall.AddElevated(AppPaths.TrayExe)); }
+                try
+                {
+                    // the rule survives a reinstall: then there is no administrator window to announce
+                    if (!await Task.Run(_firewall.RuleExists))
+                    {
+                        _ui.Announce("Ostatni krok: dostęp z sieci lokalnej",
+                            "BPP jest już zainstalowane i działa na tym komputerze.\n\n" +
+                            "Po kliknięciu OK Windows pokaże okno administratora z pytaniem o zgodę na dodanie " +
+                            "reguły zapory (program netsh, wydawca: Microsoft Windows).\n\n" +
+                            "• „Tak” — BPP będzie dostępne także z innych komputerów w sieci lokalnej.\n" +
+                            "• „Nie” — BPP będzie dostępne tylko na tym komputerze. Instalacja i tak zakończy " +
+                            "się poprawnie, a dostęp z sieci można włączyć później z menu ikonki BPP.");
+                        _ui.SetStatus("Udostępnianie w sieci lokalnej — potwierdź w oknie administratora (UAC)…", null);
+                    }
+                    code = await Task.Run(() => _firewall.AddElevated(AppPaths.TrayExe));
+                }
                 catch (Exception ex)
                 {
                     _ui.AppendLog("Zapora: " + ex.Message);
@@ -424,14 +464,48 @@ internal sealed class InstallerFlow
     /// <summary>
     /// Makes <see cref="_rootfsPath"/> a verified rootfs archive: the file given with <c>--rootfs</c> (the mini
     /// installer passes one lying next to it), else the cached or freshly downloaded copy from GitHub Releases.
-    /// Idempotent: after the import-failure loop it only re-checks the cached file.
+    /// Runs once, in the background (see <see cref="StartRootfsDownload"/>); it touches the status line only
+    /// while its own step is the current one.
     /// </summary>
+    private void StartRootfsDownload()
+    {
+        // a finished failure (or fault) is retried; a running or successful task is kept
+        if (_rootfsTask is { IsCompleted: true } done && !(done.IsCompletedSuccessfully && done.Result)) _rootfsTask = null;
+        if (_rootfsTask != null) return;
+        _ui.AppendLog("Pobieranie dystrybucji BPP w tle.");
+        _rootfsTask = DownloadRootfsAsync();
+    }
+
+    /// <summary>The DownloadRootfs step: shows the background download's progress and waits for its result.</summary>
+    private async Task<bool> WaitForRootfsAsync()
+    {
+        StartRootfsDownload();
+        _rootfsInForeground = true;
+        try
+        {
+            if (!_rootfsTask!.IsCompleted) _ui.SetStatus("Pobieranie dystrybucji BPP…", null);
+            var ok = await _rootfsTask;
+            if (!ok) _lastError = _rootfsError;
+            return ok;
+        }
+        finally
+        {
+            _rootfsInForeground = false;
+        }
+    }
+
+    /// <summary>Status line of the download: only while its own step is the current one.</summary>
+    private void RootfsStatus(string text, double? fraction)
+    {
+        if (_rootfsInForeground) _ui.SetStatus(text, fraction);
+    }
+
     private async Task<bool> DownloadRootfsAsync()
     {
         var sha = RootfsSha256;
         if (_args.Rootfs is { } local)
         {
-            _ui.SetStatus("Sprawdzanie pliku dystrybucji BPP…", null);
+            RootfsStatus("Sprawdzanie pliku dystrybucji BPP…", null);
             if (!File.Exists(local))
                 _ui.AppendLog($"Plik {local} nie istnieje — pobieram dystrybucję z internetu.");
             else if (sha != null && !await Task.Run(() => FileHash.Matches(local, sha)))
@@ -448,12 +522,12 @@ internal sealed class InstallerFlow
 
         if (RootfsUrl.Length == 0 || sha == null)
         {
-            _lastError = "Ta kompilacja instalatora nie zna adresu ani sumy kontrolnej dystrybucji BPP " +
+            _rootfsError = "Ta kompilacja instalatora nie zna adresu ani sumy kontrolnej dystrybucji BPP " +
                          "(kompilacja deweloperska). Podaj plik: BPP.exe --setup --rootfs <plik.tar.gz>.";
             return false;
         }
 
-        _ui.SetStatus("Pobieranie dystrybucji BPP…", 0);
+        RootfsStatus("Pobieranie dystrybucji BPP…", 0);
         var progress = new Progress<DownloadProgress>(ReportDownload); // created on the UI thread: posts there
         try
         {
@@ -471,7 +545,7 @@ internal sealed class InstallerFlow
         }
         catch (DownloadFailedException ex)
         {
-            _lastError = ex.Message;
+            _rootfsError = ex.Message;
             _ui.AppendLog(ex.ToString());
             return false;
         }
@@ -483,6 +557,7 @@ internal sealed class InstallerFlow
 
     private void ReportDownload(DownloadProgress p)
     {
+        if (!_rootfsInForeground) return; // in the background another step owns the status line and the bars
         var now = Environment.TickCount64;
         if (now - _lastDownloadReport < 200 && p.Fraction is not 1.0) return;
         _lastDownloadReport = now;

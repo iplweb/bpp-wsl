@@ -4,12 +4,12 @@ namespace BPP.Setup.Pages;
 internal sealed record ErrorAction(string Text, Action Run);
 
 /// <summary>
-/// Title, problem list, "Pokaż logi" / "Wyślij diagnostykę do IPLweb…" links, optional "Spróbuj ponownie" or other
+/// Title, problem list, "Pokaż logi" / "Zapisz log do pliku…" / "Wyślij diagnostykę do IPLweb…" links, optional "Spróbuj ponownie" or other
 /// action, "Zamknij".
 /// </summary>
 internal sealed class ErrorPage : Page
 {
-    public ErrorPage(string title, IReadOnlyList<string> problems, Action showLogs, Action sendDiagnostics,
+    public ErrorPage(string title, IReadOnlyList<string> problems, Action showLogs, Action saveLog, Action sendDiagnostics,
         Action? retry, Action close, ErrorAction? extra = null)
     {
         AddRow(Title(title));
@@ -29,6 +29,7 @@ internal sealed class ErrorPage : Page
 
         var links = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 4) };
         links.Controls.Add(Link("Pokaż logi", showLogs));
+        links.Controls.Add(Link("Zapisz log do pliku…", saveLog));
         links.Controls.Add(Link("Wyślij diagnostykę do IPLweb…", sendDiagnostics));
         AddRow(links);
 

@@ -2,13 +2,14 @@ using System.Runtime.Versioning;
 
 namespace BPP.Windows;
 
-/// <summary>A large, resizable read-only log window with "Kopiuj do schowka" and an optional diagnostics button.</summary>
+/// <summary>A large, resizable read-only log window with "Kopiuj do schowka", "Zapisz do pliku…" and an optional diagnostics button.</summary>
 [SupportedOSPlatform("windows")]
 public sealed class LogViewerForm : Form
 {
     private readonly Font _font = new(FontFamily.GenericMonospace, 9f);
 
-    public LogViewerForm(string title, string text, Icon? icon, Action<LogViewerForm>? sendDiagnostics)
+    public LogViewerForm(string title, string text, Icon? icon, Action<LogViewerForm>? sendDiagnostics,
+        string saveBaseName = "BPP-log")
     {
         Text = title;
         if (icon != null) Icon = icon;
@@ -40,8 +41,11 @@ public sealed class LogViewerForm : Form
         close.Click += (_, _) => Close();
         var copy = new Button { Text = "Kopiuj do schowka", AutoSize = true };
         copy.Click += (_, _) => CopyToClipboard(this, box.Text);
+        var save = new Button { Text = "Zapisz do pliku…", AutoSize = true };
+        save.Click += (_, _) => LogFile.SaveAs(this, box.Text, saveBaseName);
         buttons.Controls.Add(close);
         buttons.Controls.Add(copy);
+        buttons.Controls.Add(save);
         if (sendDiagnostics != null)
         {
             var send = new Button { Text = "Wyślij diagnostykę do IPLweb…", AutoSize = true };

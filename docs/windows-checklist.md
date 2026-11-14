@@ -16,8 +16,8 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   (systemowe `netsh.exe`, reguła zapory) — to oczekiwane, nie błąd; odmowa
   oznacza tylko BPP dostępne lokalnie.
   Wynik:
-- [ ] **2.** Z WSL: od dwukliku do „Gotowe” bez interakcji poza „Zainstaluj”
-  i jednym UAC (zapora).
+- [ ] **2.** Z WSL: od dwukliku do „Gotowe” bez interakcji poza „Zainstaluj”,
+  zapowiedzią zapory („OK”) i jednym UAC (zapora).
   Wynik:
 - [ ] **2a.** Konto zwykłego użytkownika z WSL już zainstalowanym: odmowa UAC →
   instalacja kończy się sukcesem, BPP działa na `localhost:8443`, ikonka
@@ -67,7 +67,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   zamknięcie nie czeka). Ponowne uruchomienie instalatora dokańcza instalację.
   Wynik:
 - [ ] **15.** (0.1.1) „Szczegóły ▸” wydłuża okno w dół (nie ściska strony),
-  „Szczegóły ▾” przywraca wysokość; przy 150% DPI okno nie wychodzi poza ekran.
+  „Szczegóły ▾” przywraca wysokość (także po kilku rozwinięciach z rzędu); pole logu
+  zawija długie wiersze i nie ma poziomego paska przewijania; przy 150% DPI okno nie
+  wychodzi poza ekran.
   Wynik:
 - [ ] **16.** (0.1.2) Dwa paski: górny pokazuje bieżący obraz („Pobieranie obrazu
   … (3 z 7)”, od 0 do 100% dla każdego obrazu; przy innych krokach animacja),
@@ -95,6 +97,32 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **21.** (0.1.5) workerserver dochodzi do healthy na laptopie z wieloma rdzeniami
   (wcześniej unhealthy blokował start). Wersja testowa: jeden proces roboczy
   w workerze (Celery), appserverze (gunicorn) i nginx; Postgres bez równoległości.
+  Wynik:
+
+- [ ] **22.** Żadne okno Windows nie pojawia się bez zapowiedzi: przed UAC dla DISM,
+  przed konsolą `wsl --update` i przed UAC zapory instalator pokazuje komunikat
+  „Teraz: …” / „Ostatni krok: …” z przyciskiem OK i dopiero po nim uruchamia krok.
+  Gdy reguła zapory już istnieje (ponowna instalacja), zapowiedzi zapory nie ma.
+  Po restarcie RunOnce otwiera stronę „Witaj w kolejnym etapie instalacji BPP”
+  i nic nie rusza przed „OK” („Później” zamyka instalator).
+  Wynik:
+
+- [ ] **23.** Strona „Instalowanie BPP”: pod tytułem, nad paskami, lista czterech etapów;
+  bieżący pogrubiony ze znakiem ▸, ukończone szare z ✓ (z WSL już zainstalowanym etapy
+  1–2 od razu dostają ✓). Lista mieści się w oknie przy 100–150% DPI, przyciski widoczne.
+  Wynik:
+- [ ] **24.** „Zapisz log do pliku…” (strona postępu, strona błędu, okno „Pokaż logi”,
+  okno logów ikonki): okno zapisu z domyślną nazwą `BPP-…-log-<data>.txt` na Pulpicie,
+  plik w UTF-8, bez haseł.
+  Wynik:
+
+- [ ] **25.** Bez WSL: dystrybucja BPP pobiera się w tle już podczas DISM / `wsl --update`
+  (log: „Pobieranie dystrybucji BPP w tle.”); krok „Pobieranie dystrybucji BPP” po
+  aktualizacji WSL jest krótki albo natychmiastowy. Restart w trakcie pobierania:
+  po restarcie pobieranie wznawia się od miejsca przerwania.
+  Wynik:
+- [ ] **26.** Górny pasek przy pobieraniu obrazu rośnie stopniowo (nie skacze z 0 na 100%
+  po pierwszej małej warstwie); ostatnie ~10% to rozpakowywanie warstw.
   Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)
@@ -146,7 +174,7 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   wznawia się.
   Wynik:
 - [ ] Zajęty port 8443: komunikat po polsku wskazuje proces-właściciela
-  także na polskojęzycznym Windowsie (parsowanie `netstat -ano`).
+  także na polskojęzycznym Windowsie (nazwa procesu z `GetExtendedTcpTable`, bez parsowania tekstu).
   Wynik:
 - [ ] Okno instalatora przy skalowaniu 125% i 150%: przyciski widoczne,
   lista błędów się przewija.
@@ -156,7 +184,7 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   pliki, skrót, regułę zapory).
   Wynik:
 - [ ] RunOnce po restarcie: po wymaganym restarcie instalacja wznawia się
-  sama (`--resume`, bez strony powitalnej) i dochodzi do „Gotowe”.
+  sama (`--resume`, strona „Witaj w kolejnym etapie…” zamiast licencji) i po „OK” dochodzi do „Gotowe”.
   Wynik:
 - [ ] Dwa konta Windows na jednym komputerze (A i B, kolejno — port 8443
   i przekaźnik są wspólne dla komputera, więc BPP konta A zatrzymaj przed
@@ -183,7 +211,7 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   błąd): komunikat „Nie udało się odinstalować BPP … Spróbuj ponownie
   odinstalować”, a program, skrót, wpis w „Aplikacje” i katalog
   `%LOCALAPPDATA%\Programs\BPP` zostają; ponowne „Odinstaluj” kończy
-  dzieła.
+  dzieło.
   Wynik:
 
 ## Mini instalator i pobieranie (wydanie z trzech plików)
@@ -193,7 +221,7 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   z logo. **Bez okna UAC** przy starcie mini instalatora (manifest `asInvoker`).
   Wynik:
 - [ ] **M2.** Krok „Pobieranie dystrybucji BPP… X z Y MB”: pasek kroku
-  i paska całości rosną. Po instalacji w `%LOCALAPPDATA%\BPP\download` nie
+  i pasek całości rosną. Po instalacji w `%LOCALAPPDATA%\BPP\download` nie
   zostaje rootfs ani pobrany `BPP-<wersja>.exe`.
   Wynik:
 - [ ] **M3.** Odłączenie sieci w trakcie pobierania rootfs: po ok. minucie

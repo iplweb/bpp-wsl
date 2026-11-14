@@ -6,6 +6,7 @@ namespace BPP.Setup.Pages;
 internal abstract class Page : UserControl
 {
     private static readonly Font TitleFont = new((SystemFonts.MessageBoxFont ?? DefaultFont).FontFamily, 13f, FontStyle.Bold);
+    protected static readonly Font BoldFont = new(SystemFonts.MessageBoxFont ?? DefaultFont, FontStyle.Bold);
     private static readonly Font LogFont = new(FontFamily.GenericMonospace, 8.5f);
 
     private readonly TableLayoutPanel _layout;
@@ -72,13 +73,16 @@ internal abstract class Page : UserControl
         return b;
     }
 
-    /// <summary>Read-only monospace log box (hidden until "Szczegóły" is clicked).</summary>
+    /// <summary>
+    /// Read-only monospace log box (hidden until "Szczegóły" is clicked). Long lines wrap: the wizard window is
+    /// narrow, and a horizontal scroll bar would eat a line of an already small box.
+    /// </summary>
     protected static TextBox LogBox() => new()
     {
         Multiline = true,
         ReadOnly = true,
-        WordWrap = false,
-        ScrollBars = ScrollBars.Both,
+        WordWrap = true,
+        ScrollBars = ScrollBars.Vertical,
         Font = LogFont,
         MaxLength = 0,
         Visible = false,
@@ -87,6 +91,8 @@ internal abstract class Page : UserControl
     private Control? _details;
     private LinkLabel? _detailsLink;
     private int _detailsGrowBy;
+    private bool _detailsShown; // own state: Control.Visible also reflects the parents, so it is not a reliable toggle
+    private int _collapsedHeight; // window height before the details were opened; 0 = not opened
 
     /// <summary>
     /// A "Szczegóły ▸ / ▾" link that shows and hides <paramref name="target"/>; showing it makes the window
@@ -98,7 +104,7 @@ internal abstract class Page : UserControl
         _details = target;
         _detailsLink = link;
         _detailsGrowBy = growBy;
-        link.LinkClicked += (_, _) => SetDetailsVisible(!target.Visible);
+        link.LinkClicked += (_, _) => SetDetailsVisible(!_detailsShown);
         return link;
     }
 
@@ -108,15 +114,43 @@ internal abstract class Page : UserControl
         if (_details == null || _detailsLink == null) return;
         _details.Visible = false;
         _detailsLink.Text = "Szczegóły ▸";
+        _detailsShown = false;
+        _collapsedHeight = 0; // the window is already back at its base height
     }
 
     private void SetDetailsVisible(bool visible)
     {
-        if (_details == null || _detailsLink == null || _details.Visible == visible) return;
-        _details.Visible = visible;
+        if (_details == null || _detailsLink == null || _detailsShown == visible) return;
+        _detailsShown = visible;
         _detailsLink.Text = visible ? "Szczegóły ▾" : "Szczegóły ▸";
-        if (FindForm() is not { } form) return;
-        form.Height += LogicalToDeviceUnits(_detailsGrowBy) * (visible ? 1 : -1);
+        var form = FindForm();
+        if (form == null)
+        {
+            _details.Visible = visible;
+            return;
+        }
+
+        form.SuspendLayout();
+        try
+        {
+            if (visible)
+            {
+                // remember the exact height to return to, instead of subtracting the same amount later
+                _collapsedHeight = form.Height;
+                form.Height = _collapsedHeight + LogicalToDeviceUnits(_detailsGrowBy);
+                _details.Visible = true;
+            }
+            else
+            {
+                _details.Visible = false;
+                if (_collapsedHeight > 0) form.Height = _collapsedHeight;
+                _collapsedHeight = 0;
+            }
+        }
+        finally
+        {
+            form.ResumeLayout(performLayout: true);
+        }
         var area = Screen.FromControl(form).WorkingArea;
         if (form.Bottom > area.Bottom) form.Top = Math.Max(area.Top, area.Bottom - form.Height);
     }

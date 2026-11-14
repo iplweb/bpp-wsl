@@ -1,7 +1,7 @@
 namespace BPP.Setup.Pages;
 
 /// <summary>
-/// Step label with the current step's bar (the image being pulled; marquee when unknown), the whole-installation
+/// The list of the four installation stages (done ✓, current in bold), step label with the current step's bar (the image being pulled; marquee when unknown), the whole-installation
 /// bar, collapsible log, "Anuluj".
 /// </summary>
 internal sealed class ProgressPage : Page
@@ -14,9 +14,16 @@ internal sealed class ProgressPage : Page
     private readonly ProgressBar _overall;
     private readonly TextBox _log;
     private readonly Button _cancel;
+    private readonly Label[] _stages;
+    private int _stage = -1;
 
-    public ProgressPage(Action cancel)
+    public ProgressPage(Action cancel, Action saveLog)
     {
+        _stages = BPP.Core.InstallStages.Names.Select(_ => Body("")).ToArray();
+        foreach (var l in _stages) l.Margin = new Padding(0, 0, 0, 3);
+        _stages[^1].Margin = new Padding(0, 0, 0, 12);
+        RenderStages();
+
         _status = Body("Przygotowywanie…");
         _bar = new ProgressBar { Height = 22, Maximum = BarMax, Style = ProgressBarStyle.Marquee, MarqueeAnimationSpeed = 30 };
         _overallLabel = Body("Cała instalacja: 0%");
@@ -26,11 +33,19 @@ internal sealed class ProgressPage : Page
         _cancel = Action("Anuluj", cancel);
 
         AddRow(Title("Instalowanie BPP"));
+        foreach (var l in _stages) AddRow(l);
         AddRow(_status);
         AddRow(_bar);
         AddRow(_overallLabel);
         AddRow(_overall);
-        AddRow(DetailsToggle(_log, growBy: 220));
+        var links = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+        var details = DetailsToggle(_log, growBy: 300);
+        details.Margin = new Padding(0, 6, 18, 4);
+        var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Margin = new Padding(0, 6, 0, 4) };
+        save.LinkClicked += (_, _) => saveLog();
+        links.Controls.Add(details);
+        links.Controls.Add(save);
+        AddRow(links);
         AddRow(_log, fill: true);
         AddButtons(_cancel);
     }
@@ -60,6 +75,25 @@ internal sealed class ProgressPage : Page
         if (v <= _overall.Value) return;
         _overall.Value = v;
         _overallLabel.Text = $"Cała instalacja: {v * 100 / BarMax}%";
+    }
+
+    /// <summary>Marks stage <paramref name="index"/> as the current one; never moves back (WSL is re-checked after its update).</summary>
+    public void SetStage(int index)
+    {
+        if (index <= _stage || index >= _stages.Length) return;
+        _stage = index;
+        RenderStages();
+    }
+
+    private void RenderStages()
+    {
+        for (var i = 0; i < _stages.Length; i++)
+        {
+            var mark = i < _stage ? "✓" : i == _stage ? "▸" : "   ";
+            _stages[i].Text = $"{mark} {i + 1}. {BPP.Core.InstallStages.Names[i]}";
+            _stages[i].Font = i == _stage ? BoldFont : null; // null: back to the inherited font
+            _stages[i].ForeColor = i < _stage ? SystemColors.GrayText : SystemColors.ControlText;
+        }
     }
 
     private static int ToBar(double f) => (int)Math.Round(Math.Clamp(f, 0, 1) * BarMax);

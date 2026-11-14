@@ -170,10 +170,22 @@ public sealed class Downloader
                     readCts.CancelAfter(_stallTimeout);
                     try
                     {
-                        n = await body.ReadAsync(buffer, 0, buffer.Length, readCts.Token).ConfigureAwait(false);
+                        // .NET Framework streams look at the token only before a read starts, so a stalled read
+                        // would never end there: disposing the response closes the connection and fails the read.
+                        using (readCts.Token.Register(response.Dispose))
+                            n = await body.ReadAsync(buffer, 0, buffer.Length, readCts.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                    catch (Exception ex) when (readCts.IsCancellationRequested &&
+                                               (ex is OperationCanceledException or IOException
+                                                   or ObjectDisposedException or WebException or HttpRequestException))
                     {
+                        n = -1; // aborted by the stall timer or by the caller: classified below
+                    }
+                    if (readCts.IsCancellationRequested)
+                    {
+                        // also when the read still won the race: the response may already be disposed, and the
+                        // retry resumes from the bytes written so far
+                        ct.ThrowIfCancellationRequested();
                         throw new TransientException(new TimeoutException("Pobieranie zatrzymało się (brak danych)."));
                     }
                 }

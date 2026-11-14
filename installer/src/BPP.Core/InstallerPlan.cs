@@ -100,9 +100,10 @@ public static class InstallerPlan
         // old distro the same way and the uninstaller removes both.
         InstallerStep.InstallProgram => InstallerStep.RegisterUninstall,
         InstallerStep.RegisterUninstall => InstallerStep.CheckWsl,
-        // The rootfs is fetched once WSL works (no point downloading it for a machine that cannot run it) and
-        // before AskReinstall/Unregister, so a failed download never leaves the user without the old distro.
-        // DownloadRootfs is idempotent: after the import-failure loop it only re-verifies the cached file.
+        // The flow starts the rootfs download in the background at the first CheckWsl, so it runs beside DISM and
+        // wsl --update; the DownloadRootfs step waits for it. It comes before AskReinstall/Unregister, so a failed
+        // download never leaves the user without the old distro. Idempotent: after the import-failure loop the
+        // finished download is simply reused.
         InstallerStep.CheckWsl => s.WslReady ? InstallerStep.DownloadRootfs : WslMissing(s),
         InstallerStep.DownloadRootfs => s.RootfsReady ? InstallerStep.CheckDistro : InstallerStep.DownloadFailed,
         InstallerStep.EnableWsl => s.EnableWsl switch

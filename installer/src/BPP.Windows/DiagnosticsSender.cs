@@ -23,7 +23,7 @@ public static class DiagnosticsSender
     {
         if (_busy) return;
         var ok = MessageBox.Show(owner,
-            "Instalator przygotuje plik z diagnostyką BPP: logi programu i usług BPP oraz informacje " +
+            "Program przygotuje plik z diagnostyką BPP: logi programu i usług BPP oraz informacje " +
             "o komputerze i WSL (bez haseł). Zbieranie może potrwać do kilku minut.\n\n" +
             $"Potem otworzy się nowa wiadomość do {SupportMail.Address}, do której dołączysz ten plik.\n\nKontynuować?",
             Caption, MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes;

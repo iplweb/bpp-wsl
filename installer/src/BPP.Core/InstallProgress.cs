@@ -45,3 +45,29 @@ public static class InstallProgress
         _ => InitStart,
     };
 }
+
+/// <summary>
+/// The four stages the progress page lists for the user (under "Instalowanie BPP"); each installer step belongs
+/// to one. A stage the machine does not need (WSL already there) is simply passed over.
+/// </summary>
+public static class InstallStages
+{
+    public static readonly IReadOnlyList<string> Names = new[]
+    {
+        "Sprawdzenie komputera i włączenie WSL (Linux w systemie Windows)",
+        "Pobranie i instalacja aktualnej wersji WSL z internetu",
+        "Pobranie dystrybucji BPP (ok. 170 MB)",
+        "Instalacja i uruchomienie BPP (pobranie obrazów, ok. 2 GB)",
+    };
+
+    /// <summary>Index into <see cref="Names"/> of the stage <paramref name="step"/> belongs to.</summary>
+    public static int Of(InstallerStep step) => step switch
+    {
+        InstallerStep.InstallWslPackage => 1,
+        InstallerStep.DownloadRootfs => 2,
+        InstallerStep.Preflight or InstallerStep.StopRunningBpp or InstallerStep.InstallProgram
+            or InstallerStep.RegisterUninstall or InstallerStep.CheckWsl or InstallerStep.EnableWsl
+            or InstallerStep.ScheduleResume => 0,
+        _ => 3,
+    };
+}

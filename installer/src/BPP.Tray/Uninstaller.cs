@@ -107,7 +107,11 @@ internal static class Uninstaller
             {
                 using var timeout = new CancellationTokenSource(StopTimeout);
                 try { await wsl.RunCtlTextAsync("stop", timeout.Token); }
-                catch (Exception) { /* the distro is being removed anyway */ }
+                catch (Exception ex) when (ex is InvalidOperationException or OperationCanceledException
+                                               or IOException or System.ComponentModel.Win32Exception)
+                {
+                    // stop failed or timed out: the distro is being removed anyway
+                }
             }
 
             try

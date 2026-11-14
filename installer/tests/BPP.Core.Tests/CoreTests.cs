@@ -213,6 +213,27 @@ public class InstallProgressTests
     }
 }
 
+public class InstallStagesTests
+{
+    [Fact]
+    public void Every_step_has_a_stage_and_a_full_install_never_goes_back()
+    {
+        foreach (var step in Enum.GetValues<InstallerStep>())
+            Assert.InRange(InstallStages.Of(step), 0, InstallStages.Names.Count - 1);
+
+        var order = new[]
+        {
+            InstallerStep.Preflight, InstallerStep.InstallProgram, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl,
+            InstallerStep.EnableWsl, InstallerStep.ScheduleResume, InstallerStep.InstallWslPackage,
+            InstallerStep.DownloadRootfs, InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit,
+            InstallerStep.AddFirewall, InstallerStep.CreateShortcut,
+        };
+        var stages = order.Select(InstallStages.Of).ToList();
+        Assert.Equal(stages.OrderBy(x => x), stages);
+        Assert.Equal(new[] { 0, 1, 2, 3 }, stages.Distinct());
+    }
+}
+
 public class SupportMailTests
 {
     [Theory]

@@ -38,9 +38,13 @@ przeszedł jeszcze pełnych testów na Windowsie — problemy zgłaszaj w
 
 ## Pobieranie
 
-**[⬇ Pobierz najnowszy `BPP-Setup.exe` z zakładki Releases](https://github.com/iplweb/bpp-wsl/releases/latest)**
+**[⬇ Pobierz `BPP-Setup-0.2.0.exe` (najnowsza wersja, ok. 40 KB)](https://github.com/iplweb/bpp-wsl/releases/download/v0.2.0/BPP-Setup-0.2.0.exe)**
 
-`BPP-Setup.exe` to mały plik (kilkadziesiąt KB). Resztę pobiera sam z tego
+Opis i wszystkie pliki najnowszego wydania:
+[Releases → latest](https://github.com/iplweb/bpp-wsl/releases/latest),
+starsze wersje: [Releases](https://github.com/iplweb/bpp-wsl/releases).
+
+`BPP-Setup-<wersja>.exe` to mały plik (kilkadziesiąt KB). Resztę pobiera sam z tego
 samego wydania: program `BPP-<wersja>.exe` (~50 MB) i dystrybucję WSL
 `bpp-rootfs-<wersja>.tar.gz` (~170 MB). Sprawdza przy tym sumy kontrolne
 SHA-256 wbudowane w instalator.
@@ -72,16 +76,22 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
 2. Jeśli Windows pokaże niebieskie okno **„System Windows ochronił ten
    komputer”**, kliknij **Więcej informacji → Uruchom mimo to**. (Pojawia się,
    bo program nie jest jeszcze podpisany.)
-3. Kliknij **Zainstaluj**. Instalator sprawdzi komputer i pokaże postęp.
-4. **Jeśli WSL nie jest włączony**, Windows poprosi o zgodę administratora
-   (okno UAC z wydawcą *Microsoft Windows*). Postęp włączania widać w czarnym
-   oknie konsoli. Potem instalator poprosi o **restart komputera**; po ponownym
-   zalogowaniu instalacja wznowi się sama.
+3. Kliknij **Zainstaluj**. Instalator pokaże listę czterech etapów (włączenie
+   WSL, aktualizacja WSL, pobranie dystrybucji BPP, instalacja i uruchomienie
+   BPP) z zaznaczonym bieżącym etapem oraz paski postępu.
+   Zanim Windows pokaże własne okno (zgoda administratora, czarne okno
+   konsoli), instalator zawsze najpierw mówi, co się zaraz stanie, i czeka na
+   **OK**.
+4. **Jeśli WSL nie jest włączony**, po **OK** Windows poprosi o zgodę
+   administratora (okno UAC z wydawcą *Microsoft Windows*). Postęp włączania
+   widać w czarnym oknie konsoli. Potem instalator poprosi o **restart
+   komputera**; po ponownym zalogowaniu sam pokaże okno „Witaj w kolejnym
+   etapie instalacji BPP” — kliknij w nim **OK**, żeby kontynuować.
 5. **Jeśli WSL wymaga aktualizacji** (Windows mówi wtedy „wsl --update”),
-   instalator zrobi ją sam — w oknie konsoli widać pobieranie, może też
-   pojawić się okno administratora. Nie zamykaj tego okna konsoli.
+   instalator zrobi ją sam — po **OK** w oknie konsoli widać pobieranie, może
+   też pojawić się okno administratora. Nie zamykaj tego okna konsoli.
 6. Pobieranie obrazów trwa od kilku do kilkunastu minut, zależnie od łącza.
-7. Na koniec Windows może zapytać o zgodę na **regułę zapory** — zgódź się,
+7. Na koniec instalator zapowie, a Windows zapyta o zgodę na **regułę zapory** — zgódź się,
    jeśli BPP ma być widoczne z innych komputerów w sieci. Odmowa nie psuje
    instalacji: BPP będzie wtedy dostępne tylko na tym komputerze.
 8. Kliknij **Otwórz BPP**.
@@ -109,7 +119,7 @@ Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
 | Pozycja | Co robi |
 |---|---|
 | **Otwórz BPP** | otwiera BPP w przeglądarce |
-| **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów |
+| **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów; **Zapisz do pliku…** zapisuje go jako plik tekstowy |
 | **Udostępnij w sieci lokalnej…** | dodaje regułę zapory, gdy wcześniej jej odmówiono |
 | **Zatrzymaj** | wyłącza BPP i zwalnia pamięć |
 | **Odinstaluj** | usuwa BPP razem z danymi |
@@ -124,7 +134,9 @@ wersji również zaczyna od czystej bazy.
 
 - **„Port 8443 jest zajęty”** — instalator podpowie, co go używa; jeśli to
   stare BPP, kliknij **Zatrzymaj BPP**.
-- **Za mało pamięci/miejsca** — instalator odmówi i powie, czego brakuje.
+- **Za mało pamięci/miejsca** — instalator powie, czego brakuje, i pokaże
+  przycisk **Zainstaluj mimo to** (BPP może wtedy działać wolno albo zatrzymać
+  się z braku pamięci lub miejsca).
 - **Usługi BPP nie wstały** („Konfiguracja BPP nie powiodła się”) — kliknij
   **Spróbuj ponownie**. Obrazy, które już się pobrały, nie są pobierane drugi
   raz, więc ponowienie po udanym pobieraniu tylko uruchamia usługi.
@@ -261,7 +273,12 @@ Podpisać można też gotowy plik ręcznie: `build/sign.sh dist/BPP-Setup-0.1.0.
 
 Wydania buduje GitHub Actions (`.github/workflows/release.yml`, runner
 `ubuntu-latest`): testy, `build/build.sh`, potem trzy pliki wydania
-i `SHA256SUMS.txt` trafiają do Releases jako *pre-release*. Szkic (opcja
+i `SHA256SUMS.txt` trafiają do Releases. Wydanie o wersji `N.N.N` nie jest
+oznaczane jako *pre-release* (GitHub pomija takie w `releases/latest`),
+a workflow sam poprawia w tym README link „Pobierz” (wiersz zaczynający się
+od `**[⬇ Pobierz`) na `BPP-Setup-<wersja>.exe` nowego wydania i wypycha tę
+zmianę na gałąź domyślną. Wersja z sufiksem (`0.3.0-rc1`) wychodzi jako
+*pre-release* i linku nie zmienia. Szkic (opcja
 „szkic”) nie udostępnia plików publicznie, więc mini instalator ze szkicu
 niczego nie pobierze. Do testów kładź pliki obok siebie (patrz wyżej).
 
@@ -272,6 +289,11 @@ gh variable set BPP_IMAGE_TAG --body 202609.1402   # zmiana tagu obrazów BPP
 
 Albo ręcznie: **Actions → release → Run workflow** (wersja, opcjonalnie tag
 obrazów, opcja „szkic” do testów).
+
+Istniejącego wydania nie buduje się ponownie: workflow kończy się błędem, gdy
+wydanie `v<wersja>` już jest. Ponowny build dałby pliki o innych sumach
+SHA-256 niż te wkompilowane w rozdane już `BPP-Setup-<wersja>.exe`. Poprawka
+= nowy numer wersji.
 
 ## Uwagi bezpieczeństwa
 
@@ -287,7 +309,8 @@ obrazów, opcja „szkic” do testów).
 - Kreator `/setup` jest osiągalny z sieci lokalnej, **dopóki nie powstanie
   konto administratora** — pierwszy, kto go otworzy, ustawia hasło admina.
   Załóż konto od razu po instalacji.
-- Certyfikat TLS jest samopodpisany — przeglądarka ostrzeże (Zaawansowane →
+- Certyfikat TLS jest samopodpisany (ważny 825 dni, odnawiany sam przy
+  starcie BPP na 30 dni przed końcem) — przeglądarka ostrzeże (Zaawansowane →
   Przejdź do localhost). Ostrzeżenie pojawi się też u innych komputerów
   w LAN.
 - HSTS jest wyłączony celowo (nginx nie wysyła nagłówka i usuwa ten

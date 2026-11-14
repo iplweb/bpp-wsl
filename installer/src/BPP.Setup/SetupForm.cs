@@ -50,7 +50,7 @@ internal sealed class SetupForm : Form
         Controls.Add(_content);
         Controls.Add(BuildHeader());
 
-        _progress = new ProgressPage(RequestCancel);
+        _progress = new ProgressPage(RequestCancel, SaveLog);
         Shown += OnShown;
     }
 
@@ -130,7 +130,8 @@ internal sealed class SetupForm : Form
         }
 
         _flow = new InstallerFlow(this, exe, _args);
-        if (_args.Resume) Install();
+        // after the restart nothing starts by itself: the user first reads what is about to happen
+        if (_args.Resume) ShowPage(new ResumePage(Install, Close));
         else ShowPage(new WelcomePage(Install, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
     }
 
@@ -166,6 +167,9 @@ internal sealed class SetupForm : Form
 
     public void SetOverall(double fraction) => _progress.SetOverall(fraction);
 
+    /// <summary>The stage (index into <see cref="InstallStages.Names"/>) highlighted in the list on the progress page.</summary>
+    public void SetStage(int index) => _progress.SetStage(index);
+
     /// <summary>Thread-safe: WslClient raises LogLine from its stdout and stderr pumps concurrently.</summary>
     public void AppendLog(string line)
     {
@@ -184,7 +188,7 @@ internal sealed class SetupForm : Form
         var extra = canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp)
             : canInstallAnyway ? new ErrorAction("Zainstaluj mimo to", InstallAnyway)
             : null;
-        ShowPage(new ErrorPage(title, problems, ShowLogs, () => SendDiagnostics(this), canRetry ? Retry : null, Close,
+        ShowPage(new ErrorPage(title, problems, ShowLogs, SaveLog, () => SendDiagnostics(this), canRetry ? Retry : null, Close,
             extra));
     }
 
@@ -193,9 +197,13 @@ internal sealed class SetupForm : Form
         lock (_logLock) return _log.ToString();
     }
 
+    private const string LogFileBaseName = "BPP-instalator-log";
+
+    private void SaveLog() => LogFile.SaveAs(this, LogText(), LogFileBaseName);
+
     private void ShowLogs()
     {
-        var viewer = new LogViewerForm("Instalator BPP — logi", LogText(), _icon, SendDiagnostics);
+        var viewer = new LogViewerForm("Instalator BPP — logi", LogText(), _icon, SendDiagnostics, LogFileBaseName);
         viewer.FormClosed += (_, _) => viewer.Dispose();
         viewer.Show(this);
     }
@@ -213,6 +221,13 @@ internal sealed class SetupForm : Form
     }
 
     public void ShowRestart() => ShowPage(new RestartPage(RestartComputer, Close));
+
+    /// <summary>
+    /// Says what is about to happen and waits for "OK" — shown right before a step that makes Windows open a
+    /// window of its own (UAC prompt, console), so that window never comes as a surprise.
+    /// </summary>
+    public void Announce(string title, string text)
+        => MessageBox.Show(this, title + "\n\n" + text, Caption, MessageBoxButtons.OK, MessageBoxIcon.Information);
 
     public bool AskReinstall()
         => MessageBox.Show(this, "BPP jest już zainstalowane.\n\nZainstalować ponownie? Dane testowe zostaną usunięte.",

@@ -20,6 +20,8 @@ namespace BPP.Bootstrap;
 /// </summary>
 internal static class Program
 {
+    private const string MutexName = @"Local\BPP.Bootstrap";
+
     [STAThread]
     private static int Main()
     {
@@ -31,8 +33,20 @@ internal static class Program
 
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+
+        // One mini installer per session: a second copy (an impatient double double-click) would download into
+        // the same .part file. Held until the real installer it started has exited.
+        using var mutex = new Mutex(initiallyOwned: true, MutexName, out var createdNew);
+        if (!createdNew)
+        {
+            MessageBox.Show("Instalator BPP jest już uruchomiony.", "Instalator BPP", MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return 1;
+        }
+
         using var form = new BootstrapForm();
         Application.Run(form);
+        GC.KeepAlive(mutex);
         return form.ExitCode;
     }
 }
@@ -57,7 +71,9 @@ internal sealed class BootstrapForm : Form
     private readonly ProgressBar _bar;
     private readonly Button _cancel;
     private readonly CancellationTokenSource _cts = new();
-    private long _lastReport;
+    // Stopwatch, not Environment.TickCount: that int turns negative after ~25 days of uptime
+    private readonly Stopwatch _clock = Stopwatch.StartNew();
+    private long _lastReport = -1000;
 
     public int ExitCode { get; private set; }
 
@@ -174,8 +190,8 @@ internal sealed class BootstrapForm : Form
 
     private void Report(DownloadProgress p)
     {
-        var now = Environment.TickCount;
-        if (unchecked(now - _lastReport) < 200 && p.Fraction != 1.0) return;
+        var now = _clock.ElapsedMilliseconds;
+        if (now - _lastReport < 200 && p.Fraction != 1.0) return;
         _lastReport = now;
         SetStatus(p.Total is { } t
             ? $"Pobieranie instalatora BPP… {Mb(p.Received)} z {Mb(t)} MB"
