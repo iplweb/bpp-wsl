@@ -160,6 +160,32 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   ! pgrep -f "ps --all -q appserver" >/dev/null
 }
 
+@test "init --demo generates demo data once, with the chosen theme" {
+  run bash -c '"$CTL" init --hosts localhost --demo lem 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(last_step)" = ready ]
+  [[ "$output" == *'"step":"demo"'* ]]
+  grep -q "exec -T appserver sh -c" "$MOCK_DOCKER_LOG"
+  grep -q "sh lem$" "$MOCK_DOCKER_LOG"
+  [ "$(cat "$WORK/state/demo")" = lem ]
+  : >"$MOCK_DOCKER_LOG"
+  run bash -c '"$CTL" init --hosts localhost --demo lem 2>/dev/null'
+  [ "$status" -eq 0 ]
+  ! grep -q "exec -T appserver" "$MOCK_DOCKER_LOG"
+}
+
+@test "init without --demo generates nothing; unknown theme and start --demo are rejected" {
+  run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  ! grep -q "exec -T appserver" "$MOCK_DOCKER_LOG"
+  [ ! -e "$WORK/state/demo" ]
+  run bash -c '"$CTL" init --hosts localhost --demo disney 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ "$(last_step)" = error ]
+  run bash -c '"$CTL" start --hosts localhost --demo lem 2>/dev/null'
+  [ "$status" -eq 1 ]
+}
+
 # _pull_fracs <linie JSON> - ulamki "P" z programu jq dla strumienia zdarzen pobierania
 _pull_fracs() {
   printf '%s\n' "$@" | bash -c 'source "$BPP_HOME/lib/pull.sh"; jq -rn "$_PULL_JQ"' | awk '{ printf "%.3f\n", $2 }'

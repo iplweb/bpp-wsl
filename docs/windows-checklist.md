@@ -109,7 +109,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   i nic nie rusza przed „OK” („Później” zamyka instalator).
   Wynik:
 
-- [ ] **23.** Strona „Instalowanie BPP”: pod tytułem, nad paskami, lista czterech etapów;
+- [ ] **23.** Strona „Instalowanie BPP”: pod tytułem, nad paskami, lista pięciu etapów
+  (piąty: „Pierwszy start BPP…” — zaczyna się po pobraniu obrazów, pasek kroku „kręci się”
+  do końca migracji i startu usług);
   bieżący pogrubiony ze znakiem ▸, ukończone szare z ✓ (z WSL już zainstalowanym etapy
   1–2 od razu dostają ✓). Lista mieści się w oknie przy 100–150% DPI, przyciski widoczne.
   Wynik:
@@ -144,6 +146,14 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **30.** „Wyślij diagnostykę” z okna logów ikonki, okno logów zamknięte w trakcie
   zbierania: brak wyjątku „Cannot access a disposed object”, komunikaty pokazują się
   bez okna-właściciela.
+  Wynik:
+
+- [ ] **31.** Dane przykładowe: strona powitalna ma pole „Wypełnij BPP przykładowymi danymi”
+  i listę trzech motywów (lista aktywna dopiero po zaznaczeniu; licencja nadal czytelna).
+  Po instalacji z motywem BPP ma uczelnię, autorów i publikacje z opisami bibliograficznymi,
+  a kreator pyta tylko o konto administratora. Bez zaznaczenia baza jest pusta. Wybór
+  przetrwa restart po włączeniu WSL (RunOnce z `--demo <motyw>`). „Spróbuj ponownie” nie
+  generuje danych drugi raz.
   Wynik:
 
 ## Do weryfikacji na prawdziwym Windowsie (spec §7)

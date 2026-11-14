@@ -1,9 +1,15 @@
 namespace BPP.Setup.Pages;
 
-/// <summary>Test-installation notice, the BPP MIT licence and its acceptance; "Zainstaluj" needs the checkbox.</summary>
+/// <summary>
+/// Test-installation notice, the BPP MIT licence and its acceptance ("Zainstaluj" needs the checkbox), and the
+/// optional demo data with its theme.
+/// </summary>
 internal sealed class WelcomePage : Page
 {
-    public WelcomePage(Action install, string licence)
+    /// <summary>Keeps the licence text readable now that the demo data rows sit below it.</summary>
+    public override int ExtraHeight => 90;
+
+    public WelcomePage(Action<string?> install, string licence)
     {
         AddRow(Title("Zainstaluj BPP (wersja do testów)"));
         AddRow(Body("Instalacja do wypróbowania BPP, nie do pracy produkcyjnej: dane nie mają kopii zapasowych " +
@@ -28,7 +34,33 @@ internal sealed class WelcomePage : Page
             Margin = new Padding(0, 8, 0, 4),
         };
         AddRow(accept);
-        var installButton = Action("Zainstaluj", install);
+
+        // optional demo data: BPP's own generator, run once at the first start
+        var demo = new CheckBox
+        {
+            Text = "Wypełnij BPP przykładowymi danymi:",
+            AutoSize = true,
+            Margin = new Padding(0, 4, 6, 0),
+        };
+        var theme = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 260,
+            Enabled = false,
+            Margin = new Padding(0, 1, 0, 0),
+        };
+        foreach (var t in BPP.Core.DemoThemes.All) theme.Items.Add(t.Label);
+        theme.SelectedIndex = 0;
+        demo.CheckedChanged += (_, _) => theme.Enabled = demo.Checked;
+        var demoRow = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0) };
+        demoRow.Controls.Add(demo);
+        demoRow.Controls.Add(theme);
+        AddRow(demoRow);
+        AddRow(Body("Przykładowe dane to ok. 200 autorów i 1500 publikacji w fikcyjnej uczelni — do obejrzenia " +
+                    "BPP bez wpisywania własnych. Bez nich BPP startuje puste."));
+
+        var installButton = Action("Zainstaluj",
+            () => install(demo.Checked ? BPP.Core.DemoThemes.All[theme.SelectedIndex].Key : null));
         installButton.Enabled = false;
         accept.CheckedChanged += (_, _) => installButton.Enabled = accept.Checked;
         AddButtons(installButton);

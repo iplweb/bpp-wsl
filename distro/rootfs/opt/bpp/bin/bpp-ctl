@@ -89,6 +89,33 @@ wait_services() {
   done
 }
 
+# demo_data <motyw> - (tylko init) generuje dane demo generatorem BPP: slownik dyscyplin, create_demo_data,
+# denorm_flush (opisy bibliograficzne). Raz: znacznik state/demo chroni przed powtorka przy ponowionym init
+# (druga runda dopisalaby drugi komplet). Miekko: blad nie psuje instalacji - BPP dziala, tylko bez danych demo.
+demo_data() {
+  local theme="$1" marker="$BPP_HOME/state/demo"
+  if [ -f "$marker" ]; then
+    emit demo null "Dane demo są już zainstalowane"
+    return 0
+  fi
+  emit demo null "Pierwszy start BPP: generowanie danych demo (kilka minut)"
+  # znacznik przed generowaniem: po przerwaniu w polowie nie dopisujemy drugiego kompletu
+  printf '%s\n' "$theme" >"$marker"
+  # shellcheck disable=SC2016 # $1 rozwija powloka w kontenerze
+  if timeout "${BPP_DEMO_TIMEOUT:-3600}" docker compose --project-directory "$BPP_HOME" \
+    -f "$BPP_HOME/docker-compose.yml" --env-file "$BPP_HOME/state/.env" exec -T appserver sh -c '
+      set -e
+      python src/manage.py seed_default_dyscypliny
+      python src/manage.py create_demo_data --motyw "$1" --autorow 200 --ile-ciaglych 1000 --ile-zwartych 500 \
+        --yes-i-am-sure --confirm-db bpp --manifest-out /tmp/demo_data_manifest.json
+      python src/manage.py denorm_flush' sh "$theme" 2>&1 | tr '\r' '\n' >&2; then
+    emit demo null "Dane demo zainstalowane"
+  else
+    echo "Nie udało się wygenerować danych demo - BPP działa bez nich." >&2
+    emit demo null "Nie udało się wygenerować danych demo — BPP działa bez nich"
+  fi
+}
+
 # wait_docker [event] - czeka (do BPP_DOCKER_WAIT_TIMEOUT s, domyslnie 60), az demon Dockera
 # odpowie na `docker info`: przy zimnym starcie dystrybucji dockerd moze jeszcze nie wstac.
 # Z "event" komunikat idzie tez jako zdarzenie config (init/start); bez - tylko na stderr
@@ -118,12 +145,23 @@ wait_healthy() {
   done
 }
 
-# parse_hosts <args...> -> ustawia HOSTS. Z PARSE_HOSTS_DEFAULT_SAVED=1 (start) brak --hosts
+# parse_hosts <args...> -> ustawia HOSTS i (init, opcja --demo <motyw>) DEMO_THEME. Z PARSE_HOSTS_DEFAULT_SAVED=1 (start) brak --hosts
 # oznacza liste z ostatniego uruchomienia (state/hosts) - do recznego `bpp-ctl start`.
 parse_hosts() {
   HOSTS=""
+  DEMO_THEME=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      --demo)
+        # tylko init: dane demo generuje sie raz, przy pierwszym starcie
+        [ "${PARSE_ALLOW_DEMO:-0}" = 1 ] || fail "Nieznany argument: $1"
+        [ "$#" -ge 2 ] || fail "Brak wartości dla --demo"
+        case "$2" in
+          realistyczny | lem | wiedzmin) DEMO_THEME="$2" ;;
+          *) fail "Nieznany motyw danych demo: $2" ;;
+        esac
+        shift 2
+        ;;
       --hosts)
         [ "$#" -ge 2 ] || fail "Brak wartości dla --hosts"
         HOSTS="$2"
@@ -170,7 +208,11 @@ cmd_start() {
   emit start null "Uruchamianie usług"
   # `up -d` blokuje na zdrowiu appservera (depends_on), czyli na migracjach:
   # migrate emitujemy przed nim, a calosc ograniczamy wspolnym limitem czasu.
-  emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
+  if [ "${BPP_INSTALL_MODE:-0}" = 1 ]; then
+    emit migrate null "Pierwszy start BPP: tworzenie bazy danych (może potrwać kilka minut)"
+  else
+    emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
+  fi
   DEADLINE=$((SECONDS + ${BPP_HEALTH_TIMEOUT:-1800}))
   [ "${BPP_INSTALL_MODE:-0}" != 1 ] || follow_logs_start
   export -f bpp_compose
@@ -184,12 +226,16 @@ cmd_start() {
 
   wait_healthy
   follow_logs_stop
-  [ "${BPP_INSTALL_MODE:-0}" != 1 ] || wait_services
+  if [ "${BPP_INSTALL_MODE:-0}" = 1 ]; then
+    [ -z "${INIT_DEMO_THEME:-}" ] || demo_data "$INIT_DEMO_THEME"
+    wait_services
+  fi
   emit ready 1 "BPP jest gotowe: https://localhost:8443"
 }
 
 cmd_init() {
-  parse_hosts "$@"
+  PARSE_ALLOW_DEMO=1 parse_hosts "$@"
+  INIT_DEMO_THEME="$DEMO_THEME"
   emit config null "Przygotowanie konfiguracji"
   wait_docker event
   state_ensure_env || fail "Nie udało się utworzyć state/.env (brak image-tag?)"

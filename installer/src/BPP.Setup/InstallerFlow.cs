@@ -46,10 +46,14 @@ internal sealed class InstallerFlow
         _args = args;
         // "--install-anyway" (after a restart): the user already accepted too little RAM / disk
         _state = new InstallerState { InstallAnyway = args.InstallAnyway };
+        DemoTheme = args.Demo;
         _wsl.LogLine += _ui.AppendLog; // raised from two pump threads; AppendLog is thread-safe
     }
 
     public bool IsRunning { get; private set; }
+
+    /// <summary>Demo data theme chosen on the welcome page (or carried over a restart with <c>--demo</c>); null = none.</summary>
+    public string? DemoTheme { get; set; }
 
     /// <summary>True while <c>bpp-ctl init</c> runs — the only step that can be cancelled.</summary>
     public bool InitRunning => _initCts != null;
@@ -202,7 +206,7 @@ internal sealed class InstallerFlow
             case Step.ScheduleResume:
                 // BPP.exe in the program folder: the copy the mini installer downloaded may be gone after the restart
                 _registration.SetRunOnce(
-                    $"\"{AppPaths.TrayExe}\" {(_args with { InstallAnyway = s.InstallAnyway }).ResumeCommandArgs()}");
+                    $"\"{AppPaths.TrayExe}\" {(_args with { InstallAnyway = s.InstallAnyway, Demo = DemoTheme }).ResumeCommandArgs()}");
                 return s;
 
             case Step.CheckDistro:
@@ -649,7 +653,8 @@ internal sealed class InstallerFlow
             var hosts = HostList.ToCsv(LocalHosts.Current());
             string? error = null;
             var ready = false;
-            await foreach (var ev in _wsl.RunCtlAsync("init --hosts " + hosts, cts.Token))
+            var demo = DemoThemes.IsValid(DemoTheme) ? " --demo " + DemoTheme : "";
+            await foreach (var ev in _wsl.RunCtlAsync("init --hosts " + hosts + demo, cts.Token))
             {
                 _ui.AppendLog($"[{ev.Step}] {ev.Message}");
                 if (ev.Step == "error") error = ev.Message;
@@ -658,6 +663,7 @@ internal sealed class InstallerFlow
                     if (ev.Step == "ready") ready = true;
                     _ui.SetStatus(ev.Message, ev.Item); // upper bar: the image being pulled
                     _ui.SetOverall(InstallProgress.DuringInit(ev));
+                    _ui.SetStage(InstallStages.OfInitEvent(ev.Step));
                 }
             }
             if (cts.IsCancellationRequested) return InitOutcome.Cancelled;

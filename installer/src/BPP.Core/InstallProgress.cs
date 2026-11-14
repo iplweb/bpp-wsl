@@ -42,6 +42,7 @@ public static class InstallProgress
         "pull" => PullStart + (PullEnd - PullStart) * Math.Clamp(ev.Progress ?? 0, 0, 1),
         "start" => PullEnd,
         "migrate" => 0.88,
+        "demo" => 0.90,
         "services" => 0.92,
         "ready" => 0.95,
         _ => InitStart,
@@ -49,17 +50,20 @@ public static class InstallProgress
 }
 
 /// <summary>
-/// The four stages the progress page lists for the user (under "Instalowanie BPP"); each installer step belongs
-/// to one. A stage the machine does not need (WSL already there) is simply passed over.
+/// The stages the progress page lists for the user (under "Instalowanie BPP"); each installer step belongs to
+/// one. A stage the machine does not need (WSL already there) is simply passed over.
 /// </summary>
 public static class InstallStages
 {
+    public const int FirstStart = 4;
+
     public static readonly IReadOnlyList<string> Names = new[]
     {
         "Sprawdzenie komputera i włączenie WSL (Linux w systemie Windows)",
         "Pobranie i instalacja aktualnej wersji WSL z internetu",
         "Pobranie dystrybucji BPP (ok. 170 MB)",
-        "Instalacja i uruchomienie BPP (pobranie obrazów, ok. 2 GB)",
+        "Instalacja BPP (pobranie obrazów, ok. 2 GB)",
+        "Pierwszy start BPP: tworzenie bazy danych i uruchamianie usług",
     };
 
     /// <summary>Index into <see cref="Names"/> of the stage <paramref name="step"/> belongs to.</summary>
@@ -70,6 +74,14 @@ public static class InstallStages
         InstallerStep.Preflight or InstallerStep.StopRunningBpp or InstallerStep.InstallProgram
             or InstallerStep.RegisterUninstall or InstallerStep.CheckWsl or InstallerStep.EnableWsl
             or InstallerStep.ScheduleResume => 0,
+        InstallerStep.AddFirewall or InstallerStep.CreateShortcut => FirstStart,
         _ => 3,
     };
+
+    /// <summary>
+    /// Stage of a <c>bpp-ctl init</c> event: everything after the image pull is the first start (the database is
+    /// created from scratch, migrations, optional demo data, the remaining services).
+    /// </summary>
+    public static int OfInitEvent(string step)
+        => step is "start" or "migrate" or "demo" or "services" or "ready" ? FirstStart : 3;
 }

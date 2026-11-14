@@ -230,7 +230,16 @@ public class InstallStagesTests
         };
         var stages = order.Select(InstallStages.Of).ToList();
         Assert.Equal(stages.OrderBy(x => x), stages);
-        Assert.Equal(new[] { 0, 1, 2, 3 }, stages.Distinct());
+        Assert.Equal(new[] { 0, 1, 2, 3, 4 }, stages.Distinct());
+    }
+
+    [Fact]
+    public void First_start_begins_after_the_image_pull()
+    {
+        Assert.Equal(3, InstallStages.OfInitEvent("config"));
+        Assert.Equal(3, InstallStages.OfInitEvent("pull"));
+        foreach (var step in new[] { "start", "migrate", "demo", "services", "ready" })
+            Assert.Equal(InstallStages.FirstStart, InstallStages.OfInitEvent(step));
     }
 }
 
@@ -300,5 +309,9 @@ public class AppArgsTests
         var a = new AppArgs(AppMode.Setup, InstallAnyway: true, Rootfs: @"C:\x y\r.tar.gz");
         Assert.Equal("--setup --resume --install-anyway --rootfs \"C:\\x y\\r.tar.gz\"", a.ResumeCommandArgs());
         Assert.Equal("--setup --resume", new AppArgs(AppMode.Setup).ResumeCommandArgs());
+        Assert.Equal("--setup --resume --demo lem", new AppArgs(AppMode.Setup, Demo: "lem").ResumeCommandArgs());
+        Assert.Equal("lem", AppArgs.Parse(new[] { "--setup", "--resume", "--demo", "lem" })!.Demo);
+        Assert.Null(AppArgs.Parse(new[] { "--setup", "--demo", "disney" })); // not offered
+        Assert.Null(AppArgs.Parse(new[] { "--setup", "--demo" }));
     }
 }

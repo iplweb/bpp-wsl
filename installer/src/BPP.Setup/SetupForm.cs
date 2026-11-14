@@ -131,10 +131,17 @@ internal sealed class SetupForm : Form
         _flow = new InstallerFlow(this, exe, _args);
         // after the restart nothing starts by itself: the user first reads what is about to happen
         if (_args.Resume) ShowPage(new ResumePage(Install, Close));
-        else ShowPage(new WelcomePage(Install, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
+        else ShowPage(new WelcomePage(InstallWith, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
     }
 
     private void Install() => RunFlow(f => f.RunAsync());
+
+    /// <summary>"Zainstaluj" on the welcome page; <paramref name="demoTheme"/> is null when demo data was not ticked.</summary>
+    private void InstallWith(string? demoTheme)
+    {
+        if (_flow != null) _flow.DemoTheme = demoTheme;
+        Install();
+    }
 
     private void Retry() => RunFlow(f => f.RetryAsync());
 

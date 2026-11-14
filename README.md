@@ -73,12 +73,15 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
 1. Pobierz `BPP-Setup-<wersja>.exe` i kliknij go dwukrotnie. Przeczytaj
    licencję MIT oprogramowania BPP i zaznacz jej akceptację (BPP jest
    dostarczane „tak jak jest”, bez gwarancji i bez odpowiedzialności autora).
+   Możesz też zaznaczyć **Wypełnij BPP przykładowymi danymi** i wybrać motyw
+   (polska uczelnia, świat Stanisława Lema, świat Wiedźmina): ok. 200 autorów
+   i 1500 publikacji w fikcyjnej uczelni. Bez tego BPP startuje puste.
 2. Jeśli Windows pokaże niebieskie okno **„System Windows ochronił ten
    komputer”**, kliknij **Więcej informacji → Uruchom mimo to**. (Pojawia się,
    bo program nie jest jeszcze podpisany.)
-3. Kliknij **Zainstaluj**. Instalator pokaże listę czterech etapów (włączenie
-   WSL, aktualizacja WSL, pobranie dystrybucji BPP, instalacja i uruchomienie
-   BPP) z zaznaczonym bieżącym etapem, paski postępu oraz czarne okno
+3. Kliknij **Zainstaluj**. Instalator pokaże listę pięciu etapów (włączenie
+   WSL, aktualizacja WSL, pobranie dystrybucji BPP, instalacja BPP, pierwszy
+   start BPP — tworzenie bazy danych od zera i uruchamianie usług) z zaznaczonym bieżącym etapem, paski postępu oraz czarne okno
    terminala, w którym widać, co się dzieje (także logi usług BPP przy
    pierwszym starcie).
    Zanim Windows pokaże własne okno (zgoda administratora, czarne okno
@@ -115,7 +118,8 @@ localhost** albo dodaj certyfikat później: menu ikonki BPP → **Dodaj
 certyfikat BPP**.
 
 Pojawi się **kreator konfiguracji BPP**: załóż konto administratora i wpisz
-dane uczelni. Zrób to od razu — dopóki konta nie ma, kreator może otworzyć
+dane uczelni (z danymi przykładowymi uczelnia już jest — kreator pyta tylko
+o konto administratora). Zrób to od razu — dopóki konta nie ma, kreator może otworzyć
 każdy w sieci lokalnej.
 
 Z innych komputerów w sieci BPP jest dostępne pod `https://<adres-IP-tego-komputera>:8443/`.

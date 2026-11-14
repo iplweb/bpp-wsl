@@ -18,7 +18,7 @@ internal sealed class ProgressPage : Page
     private int _stage = -1;
 
     /// <summary>Room for about 25 terminal rows on top of what the base window leaves.</summary>
-    public override int ExtraHeight => 320;
+    public override int ExtraHeight => 340;
 
     public ProgressPage(Action cancel, Action saveLog)
     {
