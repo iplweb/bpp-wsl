@@ -24,6 +24,7 @@ internal sealed class TrayContext : ApplicationContext
     private static readonly TimeSpan TerminateAllowance = TimeSpan.FromSeconds(30);
 
     private readonly WslClient _wsl = new();
+    private readonly DistroKeepAlive _keepAlive = new();
     private readonly Firewall _firewall = new();
     private readonly SynchronizationContext _ui;
     private readonly int _uiThreadId = Environment.CurrentManagedThreadId;
@@ -99,6 +100,7 @@ internal sealed class TrayContext : ApplicationContext
         _tray.DoubleClick += (_, _) => Program.OpenBrowser();
 
         _wsl.LogLine += Log;
+        _keepAlive.Log += Log;
         _networkDebounce.Tick += OnNetworkSettled;
         NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         SystemEvents.SessionEnding += OnSessionEnding;
@@ -142,6 +144,9 @@ internal sealed class TrayContext : ApplicationContext
             SetState(TipStarting, running: false);
             _startedHosts = null;
             await UpdateRelayAsync(hosts);
+
+            // before the start and for as long as the tray runs: without a client WSL stops the distro
+            _keepAlive.Start();
 
             string? error = null;
             var ready = false;
@@ -397,6 +402,7 @@ internal sealed class TrayContext : ApplicationContext
         DetachUi();
         _tray.Visible = false;
         await SettleStartAsync(StartSettleTimeout, releaseGate: true); // the uninstaller then stops the stack
+        _keepAlive.Stop();
         if (_relay != null) await _relay.DisposeAsync();
 
         try
@@ -480,6 +486,7 @@ internal sealed class TrayContext : ApplicationContext
             try { await _wsl.RunCtlTextAsync("stop", timeout.Token).ConfigureAwait(false); }
             catch (Exception ex) { Log("bpp-ctl stop: " + ex.Message); }
         }
+        _keepAlive.Stop(); // only now: the services are down, so WSL may stop the distro
         try { await _wsl.TerminateAsync().ConfigureAwait(false); }
         catch (Exception ex) { Log("wsl --terminate: " + ex.Message); }
     }
@@ -503,12 +510,23 @@ internal sealed class TrayContext : ApplicationContext
         catch (Exception ex) { Log("Błąd: " + ex.Message); }
     }
 
+    private bool _disposed;
+
+    /// <summary>
+    /// Runs twice on every exit: Application.Run disposes its context when the message loop ends, and so does
+    /// the <c>using</c> in Program.Main. The second pass must do nothing — cancelling the already disposed
+    /// <see cref="_lifetime"/> threw, so BPP.exe crashed on exit and never reached what follows the loop
+    /// (removing the program directory after an uninstall).
+    /// </summary>
     protected override void Dispose(bool disposing)
     {
-        if (disposing)
+        if (disposing && !_disposed)
         {
+            _disposed = true;
             BeginClosing();
             _lifetime.Cancel();
+            _keepAlive.Dispose();
+            _keepAlive.Log -= Log;
             _wsl.LogLine -= Log;
             _networkDebounce.Dispose();
             _tray.Dispose();

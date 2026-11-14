@@ -11,6 +11,10 @@ services:
   dbserver:
     image: postgres:18.4
     restart: unless-stopped
+    # Stopping means a shutdown checkpoint: after a lot of writes (demo data, an import) on a slow disk it
+    # takes far longer than Docker's default 10 s, after which the server would be killed mid-checkpoint
+    # and the next start would have to recover from the WAL.
+    stop_grace_period: 2m
     env_file: [state/.env]
     entrypoint: ["bash", "/usr/local/bin/docker-entrypoint-autotune.sh"]
     # Wersja testowa: bez zapytan rownoleglych i z minimum procesow pomocniczych. Parametry -c maja

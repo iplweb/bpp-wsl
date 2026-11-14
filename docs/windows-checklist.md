@@ -335,3 +335,24 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   W3): „Odinstaluj” usuwa program i wpis w „Aplikacje”, a obca dystrybucja
   `BPP` zostaje zarejestrowana i uruchamia się.
   Wynik:
+
+## Dystrybucja ma działać, dopóki działa ikonka
+
+WSL zatrzymuje dystrybucję kilkanaście sekund po odłączeniu ostatniego procesu
+`wsl.exe`, razem z Dockerem i usługami BPP. Ikonka i instalator trzymają więc
+jeden bezczynny proces `wsl.exe -d BPP -u root -- cat`.
+
+- [ ] **K1.** Po instalacji i po starcie z Menu Start: po 5 minutach bez
+  dotykania komputera `wsl -l -v` nadal pokazuje `BPP Running`,
+  a `https://localhost:8443/` odpowiada.
+  Wynik:
+- [ ] **K2.** Między końcem instalacji (okna certyfikatu i zapory, strona
+  „Gotowe”) a startem ikonki BPP nie zatrzymuje się: usługi mają ciągły czas
+  działania (`wsl -d BPP bpp-ctl compose ps`).
+  Wynik:
+- [ ] **K3.** „Zakończ” w menu ikonki: BPP.exe kończy się bez błędu aplikacji
+  w Podglądzie zdarzeń, a po kilkunastu sekundach `BPP` jest `Stopped`.
+  Wynik:
+- [ ] **K4.** Zabicie BPP.exe w Menedżerze zadań: proces `wsl.exe … cat`
+  znika sam, a dystrybucja po kilkunastu sekundach się zatrzymuje.
+  Wynik:

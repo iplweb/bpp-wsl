@@ -28,6 +28,13 @@ internal sealed class InstallerFlow
     private string _rootfsError = "";
     private bool _rootfsInForeground; // the DownloadRootfs step is waiting: the download owns the status line
     private readonly WslClient _wsl = new();
+
+    /// <summary>
+    /// Attached from the first <c>bpp-ctl init</c> until this process ends: between init and the tray taking
+    /// over (certificate and firewall prompts, the Done page) no other client holds the distro, and WSL would
+    /// stop it — and with it the freshly started BPP.
+    /// </summary>
+    private readonly DistroKeepAlive _keepAlive = new();
     private readonly WindowsFeatures _features = new();
     private readonly Firewall _firewall = new();
     private readonly Registration _registration = new();
@@ -49,6 +56,7 @@ internal sealed class InstallerFlow
         _state = new InstallerState { InstallAnyway = args.InstallAnyway };
         DemoTheme = args.Demo;
         _wsl.LogLine += _ui.AppendLog; // raised from two pump threads; AppendLog is thread-safe
+        _keepAlive.Log += _ui.AppendLog;
     }
 
     public bool IsRunning { get; private set; }
@@ -232,6 +240,7 @@ internal sealed class InstallerFlow
                 return s with { ImportOk = await ImportAsync() };
 
             case Step.RunInit:
+                _keepAlive.Start();
                 return s with { Init = await RunInitAsync() };
 
             case Step.StopDistro:
@@ -726,6 +735,7 @@ internal sealed class InstallerFlow
             try { await _wsl.RunCtlTextAsync("stop", timeout.Token); }
             catch (Exception ex) { _ui.AppendLog("bpp-ctl stop: " + ex.Message); }
         }
+        _keepAlive.Stop(); // the services are down: WSL may stop the distro
         try { await _wsl.TerminateAsync(); }
         catch (Exception ex) { _ui.AppendLog("wsl --terminate: " + ex.Message); }
     }
