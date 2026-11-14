@@ -23,16 +23,37 @@ source "$_CTL_LIB/pull.sh"
 export LC_NUMERIC=C
 
 fail() {
+  follow_logs_stop
   emit error null "$1"
   exit 1
 }
 
+# follow_logs_start / follow_logs_stop - (tylko init) logi bazy i aplikacji na stderr w trakcie pierwszego
+# startu: instalator pokazuje stderr w oknie terminala, wiec widac migracje zamiast kilku minut ciszy.
+# Proces w tle jest zawsze konczony (takze w fail), bo trzyma otwarty stderr, na ktory czeka aplikacja Windows.
+LOGS_PID=""
+follow_logs_start() {
+  (
+    until [ -n "$(bpp_compose ps --all -q appserver 2>/dev/null)" ]; do sleep 1; done
+    # exec: kill ma trafic w docker compose, nie w powloke-rodzica
+    exec docker compose --project-directory "$BPP_HOME" -f "$BPP_HOME/docker-compose.yml" \
+      --env-file "$BPP_HOME/state/.env" logs --follow --no-color --tail 50 dbserver appserver
+  ) </dev/null >&2 &
+  LOGS_PID=$!
+}
+follow_logs_stop() {
+  [ -n "$LOGS_PID" ] || return 0
+  kill "$LOGS_PID" 2>/dev/null || true
+  wait "$LOGS_PID" 2>/dev/null || true
+  LOGS_PID=""
+}
+
 trap 'fail "Nieoczekiwany błąd bpp-ctl (linia $LINENO)"' ERR
 
-# appserver_health -> starting|healthy|unhealthy|absent
-appserver_health() {
+# service_health <usluga> -> starting|healthy|unhealthy|absent
+service_health() {
   local json health state
-  json="$(bpp_compose ps --all --format json appserver 2>/dev/null || true)"
+  json="$(bpp_compose ps --all --format json "$1" 2>/dev/null || true)"
   [ -n "$json" ] || {
     echo absent
     return 0
@@ -43,6 +64,29 @@ appserver_health() {
     starting | healthy | unhealthy) echo "$health" ;;
     *) if [ "$state" = running ] || [ "$state" = restarting ]; then echo starting; else echo absent; fi ;;
   esac
+}
+
+appserver_health() { service_health appserver; }
+
+# wait_services - (tylko init) czeka, az wstana takze nginx i uslugi w tle, zeby "gotowe" w instalatorze
+# znaczylo dzialajacy system. Miekko: po BPP_SERVICES_WAIT_TIMEOUT s (domyslnie 180) idzie dalej - aplikacja
+# dziala bez workera, a jego stan widac w `bpp-ctl diag`.
+wait_services() {
+  local timeout="${BPP_SERVICES_WAIT_TIMEOUT:-180}" interval="${BPP_HEALTH_INTERVAL:-5}" deadline pending svc
+  deadline=$((SECONDS + timeout))
+  while :; do
+    pending=""
+    for svc in webserver workerserver celerybeat; do
+      [ "$(service_health "$svc")" = healthy ] || pending+="${pending:+, }$svc"
+    done
+    [ -n "$pending" ] || return 0
+    if ((SECONDS >= deadline)); then
+      echo "Usługi w tle jeszcze się uruchamiają ($pending) - BPP działa, dokończą start same." >&2
+      return 0
+    fi
+    emit services null "Uruchamianie usług w tle: $pending"
+    sleep "$interval"
+  done
 }
 
 # wait_docker [event] - czeka (do BPP_DOCKER_WAIT_TIMEOUT s, domyslnie 60), az demon Dockera
@@ -127,6 +171,7 @@ cmd_start() {
   # migrate emitujemy przed nim, a calosc ograniczamy wspolnym limitem czasu.
   emit migrate null "Migracje bazy i start aplikacji (może potrwać kilka minut)"
   DEADLINE=$((SECONDS + ${BPP_HEALTH_TIMEOUT:-1800}))
+  [ "${BPP_INSTALL_MODE:-0}" != 1 ] || follow_logs_start
   export -f bpp_compose
   rc=0
   timeout "${BPP_HEALTH_TIMEOUT:-1800}" bash -c 'bpp_compose up -d >&2' || rc=$?
@@ -137,6 +182,8 @@ cmd_start() {
   fi
 
   wait_healthy
+  follow_logs_stop
+  [ "${BPP_INSTALL_MODE:-0}" != 1 ] || wait_services
   emit ready 1 "BPP jest gotowe: https://localhost:8443"
 }
 
@@ -148,6 +195,8 @@ cmd_init() {
   # compose (config --images) wymaga plikow env_file, w tym state/hosts.env.
   ensure_hosts_config
   pull_with_progress || fail "Pobieranie obrazów nie powiodło się"
+  # pierwszy start pod okiem instalatora: logi uslug na stderr i czekanie na wszystkie uslugi
+  BPP_INSTALL_MODE=1
   cmd_start --hosts "$HOSTS"
 }
 

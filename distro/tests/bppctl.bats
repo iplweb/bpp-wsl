@@ -117,6 +117,25 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ ! -e "$WORK/state/.env" ]
 }
 
+@test "init follows service logs on stderr and stops the follower; start does not" {
+  run bash -c 'MOCK_WEBSERVER_RUNNING=1 MOCK_UP_SLEEP=2 "$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(last_step)" = ready ]
+  grep -q "logs --follow" "$MOCK_DOCKER_LOG"
+  : >"$MOCK_DOCKER_LOG"
+  run bash -c 'MOCK_WEBSERVER_RUNNING=1 MOCK_UP_SLEEP=2 "$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  ! grep -q "logs --follow" "$MOCK_DOCKER_LOG"
+}
+
+@test "failed init leaves no log follower behind" {
+  run bash -c 'MOCK_UP_RC=1 "$CTL" init --hosts localhost 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ "$(last_step)" = error ]
+  sleep 2
+  ! pgrep -f "ps --all -q appserver" >/dev/null
+}
+
 # _pull_fracs <linie JSON> - ulamki "P" z programu jq dla strumienia zdarzen pobierania
 _pull_fracs() {
   printf '%s\n' "$@" | bash -c 'source "$BPP_HOME/lib/pull.sh"; jq -rn "$_PULL_JQ"' | awk '{ printf "%.3f\n", $2 }'

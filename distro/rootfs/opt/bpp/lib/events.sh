@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # emit <step> <progress|null> <message> [item] -> jedna linia JSON na stdout.
-# Kroki: config, cert, pull, start, migrate, ready, error.
+# Kroki: config, cert, pull, start, migrate, services, ready, error.
 # item (opcjonalny, 0..1): postep biezacego elementu (obrazu w kroku pull); bez niego pola "item" nie ma.
 emit() {
   local step="$1" progress="$2" message="$3" item="${4:-null}"
