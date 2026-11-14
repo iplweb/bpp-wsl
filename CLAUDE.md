@@ -15,7 +15,10 @@ repository [iplweb/web-page-bpp](https://github.com/iplweb/web-page-bpp), file
 - the file name shown as the link text, `BPP-Setup-<version>.exe`,
 - the file size shown next to it, e.g. `(43 KB)` — take the real size of the published
   `BPP-Setup-<version>.exe` (`gh release view v<version> --json assets`),
-- the link to the release page, `https://github.com/iplweb/bpp-wsl/releases/tag/v<version>`.
+- the link to the release page, `https://github.com/iplweb/bpp-wsl/releases/tag/v<version>`,
+  and its link text, `BPP dla Windows <version>`.
+
+Afterwards no mention of the previous version may be left in that file.
 
 Do it only once the release workflow has finished and the files are public; a link to a
 release that does not exist yet breaks the download on the website.
