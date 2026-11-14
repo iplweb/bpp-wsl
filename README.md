@@ -38,7 +38,7 @@ przeszedł jeszcze pełnych testów na Windowsie — problemy zgłaszaj w
 
 ## Pobieranie
 
-**[⬇ Pobierz `BPP-Setup-0.3.1.exe` (najnowsza wersja, ok. 40 KB)](https://github.com/iplweb/bpp-wsl/releases/download/v0.3.1/BPP-Setup-0.3.1.exe)**
+**[⬇ Pobierz `BPP-Setup-0.3.2.exe` (najnowsza wersja, ok. 40 KB)](https://github.com/iplweb/bpp-wsl/releases/download/v0.3.2/BPP-Setup-0.3.2.exe)**
 
 Opis i wszystkie pliki najnowszego wydania:
 [Releases → latest](https://github.com/iplweb/bpp-wsl/releases/latest),
