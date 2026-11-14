@@ -165,8 +165,13 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   [ "$status" -eq 0 ]
   [ "$(last_step)" = ready ]
   [[ "$output" == *'"step":"demo"'* ]]
-  grep -q "exec -T appserver sh -c" "$MOCK_DOCKER_LOG"
-  grep -q "sh lem$" "$MOCK_DOCKER_LOG"
+  # three separate commands, each announced, so the installer always says which stage is running
+  [ "$(grep -c "exec -T appserver python src/manage.py" "$MOCK_DOCKER_LOG")" = 3 ]
+  grep -q "manage.py seed_default_dyscypliny$" "$MOCK_DOCKER_LOG"
+  grep -q "manage.py create_demo_data --motyw lem " "$MOCK_DOCKER_LOG"
+  grep -q "manage.py denorm_flush$" "$MOCK_DOCKER_LOG"
+  m=$(printf '%s\n' "${lines[@]}" | jq -sr '[.[]|select(.step=="demo").message|sub("^.* — "; "")]|join(";")')
+  [ "$m" = "słownik dyscyplin (1 z 3);autorzy i publikacje (2 z 3, kilka minut);opisy bibliograficzne (3 z 3, kilka minut);Dane demo zainstalowane" ]
   [ "$(cat "$WORK/state/demo")" = lem ]
   : >"$MOCK_DOCKER_LOG"
   run bash -c '"$CTL" init --hosts localhost --demo lem 2>/dev/null'

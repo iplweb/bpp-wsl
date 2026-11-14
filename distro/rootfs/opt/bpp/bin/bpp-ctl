@@ -92,23 +92,33 @@ wait_services() {
 # demo_data <motyw> - (tylko init) generuje dane demo generatorem BPP: slownik dyscyplin, create_demo_data,
 # denorm_flush (opisy bibliograficzne). Raz: znacznik state/demo chroni przed powtorka przy ponowionym init
 # (druga runda dopisalaby drugi komplet). Miekko: blad nie psuje instalacji - BPP dziala, tylko bez danych demo.
+# _demo_manage <message> <manage.py args...> - announces one stage of the demo data (the installer shows the
+# message as its status) and runs that manage.py command in appserver. The command's output goes to stderr,
+# i.e. to the installer's terminal: progress bars redraw with \r, hence the tr, and tr must not buffer -
+# into a pipe it would hold the text back in blocks, so the terminal would stand still on a stale line
+# while the work goes on.
+_demo_manage() {
+  local message="$1"
+  shift
+  emit demo null "$message"
+  timeout "${BPP_DEMO_TIMEOUT:-3600}" docker compose --project-directory "$BPP_HOME" \
+    -f "$BPP_HOME/docker-compose.yml" --env-file "$BPP_HOME/state/.env" exec -T appserver \
+    python src/manage.py "$@" 2>&1 | stdbuf -o0 tr '\r' '\n' >&2
+}
+
 demo_data() {
-  local theme="$1" marker="$BPP_HOME/state/demo"
+  local theme="$1" marker="$BPP_HOME/state/demo" what="Pierwszy start BPP: dane demo"
   if [ -f "$marker" ]; then
     emit demo null "Dane demo są już zainstalowane"
     return 0
   fi
-  emit demo null "Pierwszy start BPP: generowanie danych demo (kilka minut)"
   # znacznik przed generowaniem: po przerwaniu w polowie nie dopisujemy drugiego kompletu
   printf '%s\n' "$theme" >"$marker"
-  # shellcheck disable=SC2016 # $1 rozwija powloka w kontenerze
-  if timeout "${BPP_DEMO_TIMEOUT:-3600}" docker compose --project-directory "$BPP_HOME" \
-    -f "$BPP_HOME/docker-compose.yml" --env-file "$BPP_HOME/state/.env" exec -T appserver sh -c '
-      set -e
-      python src/manage.py seed_default_dyscypliny
-      python src/manage.py create_demo_data --motyw "$1" --autorow 200 --ile-ciaglych 1000 --ile-zwartych 500 \
-        --yes-i-am-sure --confirm-db bpp --manifest-out /tmp/demo_data_manifest.json
-      python src/manage.py denorm_flush' sh "$theme" 2>&1 | tr '\r' '\n' >&2; then
+  if _demo_manage "$what — słownik dyscyplin (1 z 3)" seed_default_dyscypliny &&
+    _demo_manage "$what — autorzy i publikacje (2 z 3, kilka minut)" \
+      create_demo_data --motyw "$theme" --autorow 200 --ile-ciaglych 1000 --ile-zwartych 500 \
+      --yes-i-am-sure --confirm-db bpp --manifest-out /tmp/demo_data_manifest.json &&
+    _demo_manage "$what — opisy bibliograficzne (3 z 3, kilka minut)" denorm_flush; then
     emit demo null "Dane demo zainstalowane"
   else
     echo "Nie udało się wygenerować danych demo - BPP działa bez nich." >&2
