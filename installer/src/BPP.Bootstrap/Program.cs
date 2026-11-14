@@ -65,7 +65,8 @@ internal static class Pinned
 
 internal sealed class BootstrapForm : Form
 {
-    private const string Caption = "Instalator BPP";
+    /// <summary>Same title as the main installer window: the name and the version (without build metadata).</summary>
+    private static readonly string Caption = "Instalator BPP " + Application.ProductVersion.Split('+')[0];
 
     private readonly Label _status;
     private readonly ProgressBar _bar;

@@ -734,7 +734,8 @@ internal sealed class InstallerFlow
     public Task<string> CreateDiagnosticsZipAsync(string log)
         => Diagnostics.CreateZipAsync("instalator", log, _wsl, _failureDiag, stopDistroIfStarted: true);
 
-    private static string Version
+    /// <summary>The installer's version as shown to the user (three components, e.g. 0.3.0).</summary>
+    internal static string Version
         => typeof(InstallerFlow).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
 
     /// <summary>

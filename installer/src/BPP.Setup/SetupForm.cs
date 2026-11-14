@@ -11,7 +11,8 @@ internal sealed class SetupForm : Form
 {
     public const string BppUrl = "https://localhost:8443/";
     private const string ProjectUrl = "https://bpp.iplweb.pl/";
-    private const string Caption = "Instalator BPP";
+    /// <summary>Window title and message box caption; carries the version, so a screenshot says which build it is.</summary>
+    private static readonly string Caption = "Instalator BPP " + InstallerFlow.Version;
     private readonly AppArgs _args;
     private readonly Icon _icon;
     private readonly Image _logo;
