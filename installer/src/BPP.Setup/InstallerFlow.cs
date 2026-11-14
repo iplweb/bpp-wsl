@@ -20,6 +20,7 @@ internal sealed class InstallerFlow
     private readonly SetupForm _ui;
     private readonly string _setupExe;
     private readonly AppArgs _args;
+    private string _foreignDistroDir = ""; // of a distro that only shares our name (set by CheckDistro)
     private string? _rootfsPath; // verified archive for wsl --import (set by DownloadRootfs)
     // The rootfs download starts at the first CheckWsl and runs beside the WSL steps (DISM, wsl --update);
     // the DownloadRootfs step only waits for it. Result: true = _rootfsPath is ready.
@@ -211,7 +212,13 @@ internal sealed class InstallerFlow
 
             case Step.CheckDistro:
                 _ui.SetStatus("Sprawdzanie poprzedniej instalacji…", null);
-                return s with { DistroExists = await _wsl.DistroExistsAsync() };
+                var owner = await _wsl.DistroOwnerAsync();
+                if (owner == DistroOwner.Foreign)
+                {
+                    _foreignDistroDir = WslClient.RegisteredDistroDir() ?? "";
+                    _ui.AppendLog($"Dystrybucja WSL „{AppPaths.DistroName}” w obcym katalogu: {_foreignDistroDir}");
+                }
+                return s with { DistroExists = owner == DistroOwner.Ours, DistroForeign = owner == DistroOwner.Foreign };
 
             case Step.AskReinstall:
                 return s with { ReinstallConfirmed = _ui.AskReinstall() };
@@ -388,6 +395,18 @@ internal sealed class InstallerFlow
                 _ui.ShowError("Instalacja przerwana", new[]
                 {
                     "Istniejąca dystrybucja BPP i jej dane pozostały bez zmian.",
+                }, canRetry: false);
+                break;
+            case Step.DistroNameTaken:
+                _ui.ShowError($"Nazwa dystrybucji WSL „{AppPaths.DistroName}” jest już zajęta", new[]
+                {
+                    $"W WSL na tym koncie istnieje dystrybucja o nazwie „{AppPaths.DistroName}”, której nie założył " +
+                    $"ten instalator (katalog: {_foreignDistroDir}). Instalator jej nie zmienił i nie usunie.",
+                    "Jeśli jest Ci potrzebna, nadaj jej inną nazwę: wyeksportuj ją (wsl --export), zaimportuj pod " +
+                    "nową nazwą (wsl --import) i dopiero wtedy usuń starą.",
+                    "Jeśli jest zbędna, usuń ją samodzielnie — otwórz Wiersz polecenia (cmd) lub PowerShell i wpisz:\r\n" +
+                    $"    wsl --unregister {AppPaths.DistroName}\r\n" +
+                    "To polecenie kasuje wszystkie jej dane. Potem uruchom instalator ponownie.",
                 }, canRetry: false);
                 break;
             case Step.Cancelled:

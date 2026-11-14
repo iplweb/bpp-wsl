@@ -68,10 +68,13 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   okno się zamyka (podczas pobierania BPP najpierw zatrzymuje kontenery; drugie
   zamknięcie nie czeka). Ponowne uruchomienie instalatora dokańcza instalację.
   Wynik:
-- [ ] **15.** Strona postępu ma stały terminal (czarne tło, białe litery, ok. 80 kolumn,
+- [ ] **15.** Strona postępu startuje ze schowanym terminalem (okno zwykłej wysokości).
+  „Pokaż terminal” rozwija go (czarne tło, białe litery, ok. 80 kolumn,
   do 25 wierszy — mniej na niskim ekranie, np. 1366×768; okno nie wychodzi poza ekran,
-  także przy 150% DPI). Widać w nim kroki instalatora, a przy pierwszym starcie usług
-  logi bazy i aplikacji (migracje). Inne strony wracają do zwykłej wysokości okna.
+  także przy 150% DPI) razem ze wszystkim, co wypisano, zanim go pokazano, przewinięty
+  do końca; „Ukryj terminal” przywraca zwykłą wysokość. Widać w nim kroki instalatora,
+  a przy pierwszym starcie usług logi bazy i aplikacji (migracje). „Zapisz log do
+  pliku…” działa także przy schowanym terminalu. Inne strony mają zwykłą wysokość okna.
   Wynik:
 - [ ] **16.** (0.1.2) Dwa paski: górny pokazuje bieżący obraz („Pobieranie obrazu
   … (3 z 7)”, od 0 do 100% dla każdego obrazu; przy innych krokach animacja),
@@ -309,4 +312,24 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **C6.** „Odinstaluj” → Windows pyta o usunięcie „BPP localhost CA”;
   po „Tak” wpisu nie ma. Po „Nie” podsumowanie odinstalowania mówi, że
   certyfikat został i jak go usunąć.
+  Wynik:
+
+## Inne dystrybucje WSL obok BPP
+
+- [ ] **W1.** Z zainstalowanym Ubuntu (lub inną dystrybucją) jako domyślną:
+  instalacja BPP kończy się sukcesem, `wsl -l -v` pokazuje obie, domyślna się
+  nie zmienia, pliki w Ubuntu są na miejscu.
+  Wynik:
+- [ ] **W2.** „Odinstaluj” przy działającym Ubuntu: znika tylko `BPP`
+  i `%LOCALAPPDATA%\BPP`; Ubuntu dalej działa (nie zostało zatrzymane) i ma
+  swoje pliki.
+  Wynik:
+- [ ] **W3.** Obca dystrybucja o nazwie `BPP` w innym katalogu
+  (`wsl --import BPP C:\wsl\obca <dowolny rootfs.tar>`): instalator kończy stroną
+  „Nazwa dystrybucji WSL „BPP” jest już zajęta” z jej katalogiem, bez pytania
+  o ponowną instalację; dystrybucja jest nietknięta.
+  Wynik:
+- [ ] **W4.** Jak W3, ale BPP.exe jest już w folderze programu (zostaje po
+  W3): „Odinstaluj” usuwa program i wpis w „Aplikacje”, a obca dystrybucja
+  `BPP` zostaje zarejestrowana i uruchamia się.
   Wynik:

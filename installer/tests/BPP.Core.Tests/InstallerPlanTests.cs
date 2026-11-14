@@ -278,6 +278,14 @@ public class InstallerPlanTests
         => Assert.Equal(S.Declined, InstallerPlan.Next(After(S.AskReinstall) with { DistroExists = true }));
 
     [Fact]
+    public void Foreign_distro_with_our_name_stops_the_install_untouched()
+    {
+        var s = After(S.CheckDistro) with { DistroForeign = true };
+        Assert.Equal(S.DistroNameTaken, InstallerPlan.Next(s));
+        Assert.True(InstallerPlan.IsFinal(S.DistroNameTaken));
+    }
+
+    [Fact]
     public void No_distro_imports()
         => Assert.Equal(S.ImportDistro, InstallerPlan.Next(After(S.CheckDistro) with { DistroExists = false }));
 
@@ -378,6 +386,7 @@ public class InstallerPlanTests
     [InlineData(S.WslUnavailable)]
     [InlineData(S.ImportFailed)]
     [InlineData(S.Declined)]
+    [InlineData(S.DistroNameTaken)]
     [InlineData(S.Cancelled)]
     public void Other_errors_are_not_retryable(S step) => Assert.False(InstallerPlan.CanRetry(step));
 

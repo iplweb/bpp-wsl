@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using System.Runtime.Versioning;
 using System.Text;
 using BPP.Core;
+using Microsoft.Win32;
 
 namespace BPP.Windows;
 
@@ -10,6 +11,8 @@ namespace BPP.Windows;
 public sealed class WslClient
 {
     private const string CtlPath = "/opt/bpp/bin/bpp-ctl";
+
+    private const string LxssKey = @"Software\Microsoft\Windows\CurrentVersion\Lxss";
 
     private static string WslExe => Path.Combine(Environment.SystemDirectory, "wsl.exe");
 
@@ -22,7 +25,43 @@ public sealed class WslClient
         return r is { ExitCode: 0 };
     }
 
-    public Task<bool> DistroExistsAsync() => ListedAsync("-l", "-q");
+    /// <summary>
+    /// Whether OUR distro is registered. A distro that only shares the name (see <see cref="DistroOwnerAsync"/>)
+    /// does not count, so nothing that stops, unregisters or drives "the BPP distro" ever touches it.
+    /// </summary>
+    public async Task<bool> DistroExistsAsync() => await DistroOwnerAsync().ConfigureAwait(false) == DistroOwner.Ours;
+
+    /// <summary>Whose distro is registered under our name: listed by wsl.exe, then located through the registry.</summary>
+    public async Task<DistroOwner> DistroOwnerAsync()
+    {
+        var listed = await ListedAsync("-l", "-q").ConfigureAwait(false);
+        return DistroOwnership.Classify(listed, listed ? RegisteredDistroDir() : null, AppPaths.DistroDir);
+    }
+
+    /// <summary>
+    /// The directory in which WSL keeps the distro registered under our name (<c>BasePath</c> of its entry under
+    /// HKCU\…\Lxss — WSL distros are per user), or null when there is no such entry or it cannot be read.
+    /// </summary>
+    public static string? RegisteredDistroDir()
+    {
+        try
+        {
+            using var lxss = Registry.CurrentUser.OpenSubKey(LxssKey);
+            if (lxss == null) return null;
+            foreach (var id in lxss.GetSubKeyNames())
+            {
+                using var distro = lxss.OpenSubKey(id);
+                if (distro?.GetValue("DistributionName") is string name
+                    && string.Equals(name, AppPaths.DistroName, StringComparison.OrdinalIgnoreCase))
+                    return distro.GetValue("BasePath") as string;
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return null; // location unknown: DistroOwnership.Classify then goes by the name alone
+        }
+    }
 
     /// <summary>
     /// Whether the BPP distro is running, without starting it (<c>wsl -l --running -q</c>; with nothing running

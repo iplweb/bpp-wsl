@@ -2,7 +2,8 @@ namespace BPP.Setup.Pages;
 
 /// <summary>
 /// The list of the four installation stages (done ✓, current in bold), step label with the current step's bar (the image being pulled; marquee when unknown), the whole-installation
-/// bar, the terminal with the log, "Zapisz log do pliku…", "Anuluj".
+/// bar, "Pokaż terminal" / "Ukryj terminal" with "Zapisz log do pliku…", the terminal with the log (hidden until
+/// asked for; it collects the log either way), "Anuluj".
 /// </summary>
 internal sealed class ProgressPage : Page
 {
@@ -13,15 +14,20 @@ internal sealed class ProgressPage : Page
     private readonly Label _overallLabel;
     private readonly ProgressBar _overall;
     private readonly TextBox _log;
+    private readonly Button _toggle;
     private readonly Button _cancel;
+    private readonly Action _heightChanged;
+    private bool _terminalShown;
     private readonly Label[] _stages;
     private int _stage = -1;
 
-    /// <summary>Room for about 25 terminal rows on top of what the base window leaves.</summary>
-    public override int ExtraHeight => 340;
+    /// <summary>With the terminal shown: room for about 25 rows on top of what the base window leaves.</summary>
+    public override int ExtraHeight => _terminalShown ? 340 : 0;
 
-    public ProgressPage(Action cancel, Action saveLog)
+    /// <param name="heightChanged">Called after <see cref="ExtraHeight"/> changed, so the window can resize.</param>
+    public ProgressPage(Action cancel, Action saveLog, Action heightChanged)
     {
+        _heightChanged = heightChanged;
         _stages = BPP.Core.InstallStages.Names.Select(_ => Body("")).ToArray();
         foreach (var l in _stages) l.Margin = new Padding(0, 0, 0, 3);
         _stages[^1].Margin = new Padding(0, 0, 0, 12);
@@ -33,6 +39,9 @@ internal sealed class ProgressPage : Page
         _overallLabel.Margin = new Padding(0, 14, 0, 6);
         _overall = new ProgressBar { Height = 22, Maximum = BarMax, Style = ProgressBarStyle.Continuous };
         _log = Terminal();
+        _log.Visible = false;
+        _toggle = new Button { Text = ShowTerminalText, AutoSize = true, MinimumSize = new Size(130, 28), Margin = new Padding(0, 0, 14, 0) };
+        _toggle.Click += (_, _) => ToggleTerminal();
         _cancel = Action("Anuluj", cancel);
 
         AddRow(Title("Instalowanie BPP"));
@@ -41,11 +50,29 @@ internal sealed class ProgressPage : Page
         AddRow(_bar);
         AddRow(_overallLabel);
         AddRow(_overall);
-        AddRow(_log, fill: true);
-        var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Margin = new Padding(0, 2, 0, 4) };
+        // no Top/Bottom anchor: the flow panel centres the link on the button's height
+        var save = new LinkLabel { Text = "Zapisz log do pliku…", AutoSize = true, Anchor = AnchorStyles.Left, Margin = new Padding(0) };
         save.LinkClicked += (_, _) => saveLog();
-        AddRow(save);
+        var tools = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 12, 0, 4) };
+        tools.Controls.Add(_toggle);
+        tools.Controls.Add(save);
+        AddRow(tools);
+        AddRow(_log, fill: true);
         AddButtons(_cancel);
+    }
+
+    private const string ShowTerminalText = "Pokaż terminal";
+    private const string HideTerminalText = "Ukryj terminal";
+
+    private void ToggleTerminal()
+    {
+        _terminalShown = !_terminalShown;
+        _toggle.Text = _terminalShown ? HideTerminalText : ShowTerminalText;
+        _log.Visible = _terminalShown;
+        _heightChanged();
+        if (!_terminalShown) return;
+        _log.SelectionStart = _log.TextLength; // lines appended while hidden: show the newest ones
+        _log.ScrollToCaret();
     }
 
     /// <summary>

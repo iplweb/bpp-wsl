@@ -81,9 +81,10 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
    bo program nie jest jeszcze podpisany.)
 3. Kliknij **Zainstaluj**. Instalator pokaże listę pięciu etapów (włączenie
    WSL, aktualizacja WSL, pobranie dystrybucji BPP, instalacja BPP, pierwszy
-   start BPP — tworzenie bazy danych od zera i uruchamianie usług) z zaznaczonym bieżącym etapem, paski postępu oraz czarne okno
-   terminala, w którym widać, co się dzieje (także logi usług BPP przy
-   pierwszym starcie).
+   start BPP — tworzenie bazy danych od zera i uruchamianie usług) z zaznaczonym bieżącym etapem i paski postępu. Przycisk
+   **Pokaż terminal** rozwija czarne okno terminala, w którym widać, co się
+   dzieje (także logi usług BPP przy pierwszym starcie); **Ukryj terminal**
+   chowa je z powrotem.
    Zanim Windows pokaże własne okno (zgoda administratora, czarne okno
    konsoli), instalator zawsze najpierw mówi, co się zaraz stanie, i czeka na
    **OK**.
@@ -147,6 +148,12 @@ usunięcie reguły zapory dodanej przy instalacji; program uprzedza o tym
 komunikatem.
 **Wszystkie dane testowe zostaną usunięte bezpowrotnie.** Instalacja nowszej
 wersji również zaczyna od czystej bazy.
+
+Inne dystrybucje WSL na tym koncie (Ubuntu, Fedora itd.) pozostają nietknięte:
+program zatrzymuje i usuwa wyłącznie dystrybucję `BPP`, którą sam założył
+w folderze `%LOCALAPPDATA%\BPP\wsl`. Jeśli masz własną dystrybucję o nazwie
+`BPP` w innym miejscu, instalator jej nie ruszy — poprosi o zmianę jej nazwy
+albo o samodzielne usunięcie.
 
 ## Gdy coś nie działa
 

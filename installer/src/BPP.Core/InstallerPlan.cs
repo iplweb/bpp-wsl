@@ -34,6 +34,7 @@ public enum InstallerStep
     ImportFailed,
     InitFailed,
     Declined,
+    DistroNameTaken,
     Cancelled,
 }
 
@@ -66,7 +67,11 @@ public sealed record InstallerState
     /// <summary>The verified rootfs archive is on disk (downloaded, cached or given with <c>--rootfs</c>).</summary>
     public bool RootfsReady { get; init; }
 
+    /// <summary>Our distro is registered (<see cref="DistroOwner.Ours"/>): a previous installation.</summary>
     public bool DistroExists { get; init; }
+
+    /// <summary>A distro with our name is registered outside our data directory (<see cref="DistroOwner.Foreign"/>).</summary>
+    public bool DistroForeign { get; init; }
     public bool ReinstallConfirmed { get; init; }
     public bool ImportOk { get; init; }
     public InitOutcome Init { get; init; }
@@ -122,7 +127,9 @@ public static class InstallerPlan
         },
         InstallerStep.InstallWslPackage => InstallerStep.CheckWsl,
         InstallerStep.ScheduleResume => InstallerStep.RestartRequired,
-        InstallerStep.CheckDistro => s.DistroExists ? InstallerStep.AskReinstall : InstallerStep.ImportDistro,
+        // Somebody else's distro under our name: it is not ours to replace, and the import would fail on the name.
+        InstallerStep.CheckDistro => s.DistroForeign ? InstallerStep.DistroNameTaken
+            : s.DistroExists ? InstallerStep.AskReinstall : InstallerStep.ImportDistro,
         InstallerStep.AskReinstall => s.ReinstallConfirmed ? InstallerStep.Unregister : InstallerStep.Declined,
         InstallerStep.Unregister => InstallerStep.ImportDistro,
         // A failed import may mean WSL is too old ("wsl --update", e.g. right after DISM and the restart) or not

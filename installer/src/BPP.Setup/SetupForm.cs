@@ -49,7 +49,7 @@ internal sealed class SetupForm : Form
         Controls.Add(_content);
         Controls.Add(BuildHeader());
 
-        _progress = new ProgressPage(RequestCancel, SaveLog);
+        _progress = new ProgressPage(RequestCancel, SaveLog, heightChanged: FitProgressHeight);
         Shown += OnShown;
     }
 
@@ -246,17 +246,27 @@ internal sealed class SetupForm : Form
     /// <summary>Replaces the current page; the progress page is kept (its log survives a retry).</summary>
     private void ShowPage(Control page)
     {
-        // every page gets the base height plus what it asks for (the progress page: its terminal), within the screen
-        if (_baseHeight == 0) _baseHeight = Height;
-        var area = Screen.FromControl(this).WorkingArea;
-        Height = Math.Min(_baseHeight + LogicalToDeviceUnits((page as Pages.Page)?.ExtraHeight ?? 0), area.Height);
-        if (Bottom > area.Bottom) Top = Math.Max(area.Top, area.Bottom - Height);
+        FitHeight(page);
         var old = _content.Controls.Cast<Control>().ToList();
         _content.Controls.Clear();
         _content.Controls.Add(page);
         foreach (var c in old)
             if (!ReferenceEquals(c, _progress) && !ReferenceEquals(c, page)) c.Dispose();
     }
+
+    /// <summary>
+    /// Every page gets the base height plus what it asks for (the progress page: its terminal, once shown),
+    /// within the screen.
+    /// </summary>
+    private void FitHeight(Control page)
+    {
+        if (_baseHeight == 0) _baseHeight = Height;
+        var area = Screen.FromControl(this).WorkingArea;
+        Height = Math.Min(_baseHeight + LogicalToDeviceUnits((page as Pages.Page)?.ExtraHeight ?? 0), area.Height);
+        if (Bottom > area.Bottom) Top = Math.Max(area.Top, area.Bottom - Height);
+    }
+
+    private void FitProgressHeight() => FitHeight(_progress);
 
     /// <summary>"Anuluj" behaves like closing the window (see <see cref="OnFormClosing"/>).</summary>
     private void RequestCancel() => Close();
