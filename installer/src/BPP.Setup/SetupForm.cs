@@ -213,11 +213,11 @@ internal sealed class SetupForm : Form
         await DiagnosticsSender.SendAsync(owner, () => _flow.CreateDiagnosticsZipAsync(LogText()));
     }
 
-    public void ShowDone(bool lanEnabled)
+    public void ShowDone(bool lanEnabled, bool certificateTrusted)
     {
         // the tray starts now, not when this window closes: the icon is there while the user reads the page
         LaunchTray();
-        ShowPage(new DonePage(lanEnabled, OpenBpp, Close));
+        ShowPage(new DonePage(lanEnabled, certificateTrusted, OpenBpp, Close));
     }
 
     public void ShowRestart() => ShowPage(new RestartPage(RestartComputer, Close));

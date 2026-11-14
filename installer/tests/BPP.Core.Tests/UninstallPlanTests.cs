@@ -7,12 +7,12 @@ public class UninstallPlanTests
     [Fact]
     public void Distro_gone_removes_everything_and_schedules_program_dir_removal()
         => Assert.Equal(new UninstallCleanup(RemoveData: true, RemoveRegistration: true, RemoveFirewallRule: true,
-            RemoveProgramDir: true), UninstallPlan.AfterUnregister(distroGone: true));
+            RemoveProgramDir: true, RemoveCertificate: true), UninstallPlan.AfterUnregister(distroGone: true));
 
     [Fact]
     public void Distro_still_there_removes_nothing_so_the_uninstall_can_be_retried()
         => Assert.Equal(new UninstallCleanup(RemoveData: false, RemoveRegistration: false, RemoveFirewallRule: false,
-            RemoveProgramDir: false), UninstallPlan.AfterUnregister(distroGone: false));
+            RemoveProgramDir: false, RemoveCertificate: false), UninstallPlan.AfterUnregister(distroGone: false));
 
     [Theory]
     [InlineData(false, false, false, true)] // nothing to unregister (partial install, or a retry after a late success)

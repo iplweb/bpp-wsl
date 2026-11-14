@@ -24,6 +24,7 @@ public static class InstallProgress
         InstallerStep.CheckDistro or InstallerStep.AskReinstall or InstallerStep.Unregister => DownloadEnd,
         InstallerStep.ImportDistro => 0.11,
         InstallerStep.RunInit or InstallerStep.StopDistro => InitStart,
+        InstallerStep.TrustCertificate => 0.95,
         InstallerStep.AddFirewall => 0.96,
         InstallerStep.CreateShortcut => 0.98,
         _ => 1,

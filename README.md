@@ -25,7 +25,7 @@ Więcej o BPP: **[bpp.iplweb.pl](https://bpp.iplweb.pl/)**
   a **odinstalowanie lub instalacja nowszej wersji kasuje je bezpowrotnie**,
 - serwer dla wielu użytkowników — BPP działa tylko wtedy, gdy ten komputer
   jest włączony, a BPP uruchomione z Menu Start,
-- dostęp z internetu — certyfikat jest samopodpisany, a konfiguracja
+- dostęp z internetu — certyfikat jest wystawiony lokalnie, a konfiguracja
   nastawiona na wygodę testów, nie na bezpieczeństwo.
 
 Do pracy produkcyjnej służy instalacja na serwerze:
@@ -105,9 +105,14 @@ krzyżykiem i dokończyć później, uruchamiając instalator ponownie.
 
 ## Pierwsze uruchomienie
 
-Przeglądarka otworzy `https://localhost:8443/`. Zobaczysz ostrzeżenie
-o certyfikacie — to normalne, bo certyfikat jest wygenerowany lokalnie.
-Kliknij **Zaawansowane → Przejdź do localhost**.
+Przeglądarka otworzy `https://localhost:8443/`. Jeśli podczas instalacji
+zgodziłeś się w oknie Windows „Ostrzeżenie o zabezpieczeniach” na dodanie
+certyfikatu „BPP localhost CA”, Edge i Chrome otworzą stronę bez ostrzeżeń.
+
+Jeśli odmówiłeś, zobaczysz ostrzeżenie o certyfikacie — to normalne, bo
+certyfikat jest wystawiony lokalnie. Kliknij **Zaawansowane → Przejdź do
+localhost** albo dodaj certyfikat później: menu ikonki BPP → **Dodaj
+certyfikat BPP**.
 
 Pojawi się **kreator konfiguracji BPP**: załóż konto administratora i wpisz
 dane uczelni. Zrób to od razu — dopóki konta nie ma, kreator może otworzyć
@@ -318,10 +323,20 @@ SHA-256 niż te wkompilowane w rozdane już `BPP-Setup-<wersja>.exe`. Poprawka
 - Kreator `/setup` jest osiągalny z sieci lokalnej, **dopóki nie powstanie
   konto administratora** — pierwszy, kto go otworzy, ustawia hasło admina.
   Załóż konto od razu po instalacji.
-- Certyfikat TLS jest samopodpisany (ważny 825 dni, odnawiany sam przy
-  starcie BPP na 30 dni przed końcem) — przeglądarka ostrzeże (Zaawansowane →
-  Przejdź do localhost). Ostrzeżenie pojawi się też u innych komputerów
-  w LAN.
+- Certyfikat TLS serwera (ważny 825 dni, odnawiany sam przy starcie BPP na
+  30 dni przed końcem) wystawia **lokalne CA „BPP localhost CA”**, tworzone
+  raz w dystrybucji (ważne 10 lat). Instalator dodaje to CA do zaufanych
+  głównych urzędów certyfikacji **bieżącego konta Windows** (nie całego
+  komputera, bez uprawnień administratora) — Windows pyta o zgodę własnym
+  oknem. Odinstalowanie usuwa certyfikat (Windows znów pyta o zgodę).
+- Klucz prywatny CA leży w dystrybucji (`/opt/bpp/state/ca/ca.key`, tryb
+  0600, poza katalogiem montowanym do nginx). CA ma krytyczne ograniczenie
+  nazw: z nazw DNS tylko `localhost` (adresy IPv4 dowolne), więc nie da się
+  nim wystawić zaufanego certyfikatu dla prawdziwej domeny. Aplikacja Windows
+  sprawdza to ograniczenie przed dodaniem certyfikatu.
+- Inne komputery w LAN nadal zobaczą ostrzeżenie o certyfikacie — ufa mu
+  tylko konto, na którym zainstalowano BPP. Certyfikat CA można pobrać
+  poleceniem `wsl -d BPP -u root -- bpp-ctl ca-cert`.
 - HSTS jest wyłączony celowo (nginx nie wysyła nagłówka i usuwa ten
   z aplikacji), żeby samopodpisany certyfikat nie blokował przeglądarki
   „na stałe”.

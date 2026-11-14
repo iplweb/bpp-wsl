@@ -63,12 +63,36 @@ last_step() { echo "${lines[-1]}" | jq -r .step; }
   run bash -c '"$CTL" init --hosts localhost 2>/dev/null'
   [ "$status" -eq 0 ]
   # podmiana na certyfikat wazny 10 dni (< 30 dni progu odnowienia)
-  bash -c 'source "$BPP_HOME/lib/cert.sh"; BPP_CERT_DAYS=10 cert_generate localhost "$BPP_HOME/state/ssl"'
+  bash -c 'source "$BPP_HOME/lib/cert.sh"; BPP_CERT_DAYS=10 cert_generate localhost "$BPP_HOME/state/ssl" "$BPP_HOME/state/ca"'
   m1=$(md5sum "$WORK/state/ssl/cert.pem")
   run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
   [ "$status" -eq 0 ]
   [ "$m1" != "$(md5sum "$WORK/state/ssl/cert.pem")" ]
   openssl x509 -in "$WORK/state/ssl/cert.pem" -noout -checkend $((800 * 86400))
+}
+
+@test "ca-cert prints the CA the server cert chains to; hosts change keeps the CA" {
+  run bash -c '"$CTL" ca-cert 2>/dev/null'
+  [ "$status" -eq 1 ]
+  [ "$(last_step)" = error ]
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  run bash -c '"$CTL" ca-cert 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$output" = "$(cat "$WORK/state/ca/ca.pem")" ]
+  ca1="$output"
+  "$CTL" start --hosts localhost,10.1.1.1 >/dev/null 2>&1
+  [ "$ca1" = "$("$CTL" ca-cert 2>/dev/null)" ]
+  openssl verify -CAfile "$WORK/state/ca/ca.pem" "$WORK/state/ssl/cert.pem"
+}
+
+@test "start replaces a self-signed cert left by a version without the local CA" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  rm -r "$WORK/state/ca"
+  openssl req -x509 -newkey rsa:2048 -nodes -days 800 -subj /CN=localhost \
+    -keyout "$WORK/state/ssl/key.pem" -out "$WORK/state/ssl/cert.pem" 2>/dev/null
+  run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  openssl verify -CAfile "$WORK/state/ca/ca.pem" "$WORK/state/ssl/cert.pem"
 }
 
 @test "start with new hosts regenerates cert and hosts.env" {

@@ -180,8 +180,8 @@ public class InstallProgressTests
         var order = new[]
         {
             InstallerStep.Preflight, InstallerStep.InstallProgram, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl, InstallerStep.DownloadRootfs,
-            InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit, InstallerStep.AddFirewall,
-            InstallerStep.CreateShortcut, InstallerStep.Done,
+            InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit, InstallerStep.TrustCertificate,
+            InstallerStep.AddFirewall, InstallerStep.CreateShortcut, InstallerStep.Done,
         };
         var at = order.Select(InstallProgress.AtStart).ToList();
         Assert.Equal(at.OrderBy(x => x), at);
@@ -201,7 +201,7 @@ public class InstallProgressTests
         var at = events.Select(InstallProgress.DuringInit).ToList();
         Assert.Equal(at.OrderBy(x => x), at);
         Assert.True(at[0] >= InstallProgress.AtStart(InstallerStep.RunInit));
-        Assert.True(at[^1] <= InstallProgress.AtStart(InstallerStep.AddFirewall));
+        Assert.True(at[^1] <= InstallProgress.AtStart(InstallerStep.TrustCertificate));
         Assert.True(at[4] - at[2] > 0.5); // the pull is the long part of the install
     }
 
@@ -226,7 +226,7 @@ public class InstallStagesTests
             InstallerStep.Preflight, InstallerStep.InstallProgram, InstallerStep.RegisterUninstall, InstallerStep.CheckWsl,
             InstallerStep.EnableWsl, InstallerStep.ScheduleResume, InstallerStep.InstallWslPackage,
             InstallerStep.DownloadRootfs, InstallerStep.CheckDistro, InstallerStep.ImportDistro, InstallerStep.RunInit,
-            InstallerStep.AddFirewall, InstallerStep.CreateShortcut,
+            InstallerStep.TrustCertificate, InstallerStep.AddFirewall, InstallerStep.CreateShortcut,
         };
         var stages = order.Select(InstallStages.Of).ToList();
         Assert.Equal(stages.OrderBy(x => x), stages);

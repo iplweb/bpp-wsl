@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # bpp-ctl - jedyny punkt wejscia dla aplikacji Windows:
 #   wsl -d BPP -u root -- /opt/bpp/bin/bpp-ctl <polecenie>
-# stdout: wylacznie linie JSON (emit) - wyjatki: `status` (jedna linia JSON), `logs`, `diag`
-# i `compose` (zwykly tekst). Logi dla ludzi i wyjscie dockera ida na stderr.
+# stdout: wylacznie linie JSON (emit) - wyjatki: `status` (jedna linia JSON), `logs`, `diag`,
+# `compose` (zwykly tekst) i `ca-cert` (PEM). Logi dla ludzi i wyjscie dockera ida na stderr.
 # Kod wyjscia != 0 <=> ostatnie zdarzenie to "error".
 set -Eeuo pipefail
 
@@ -140,16 +140,17 @@ parse_hosts() {
 }
 
 # ensure_hosts_config - certyfikat, state/hosts.env i state/hosts dla $HOSTS;
-# regeneruje tylko przy zmianie listy hostow, braku plikow albo zblizajacym sie koncu waznosci certyfikatu.
+# regeneruje tylko przy zmianie listy hostow, braku plikow, zblizajacym sie koncu waznosci certyfikatu
+# albo gdy certyfikat nie pochodzi od lokalnego CA (state/ca; instalacja sprzed CA lub CA wymienione).
 # Ustawia CERT_CHANGED=1, gdy cos wygenerowano (init -> start: flaga przetrwa,
 # wiec nginx zostanie przeladowany, jesli juz dziala).
 CERT_CHANGED=0
 ensure_hosts_config() {
   if state_hosts_changed "$HOSTS" || [ ! -f "$BPP_HOME/state/ssl/cert.pem" ] || [ ! -f "$BPP_HOME/state/hosts.env" ] ||
-    cert_needs_renewal "$BPP_HOME/state/ssl"; then
+    cert_needs_renewal "$BPP_HOME/state/ssl" || ! cert_signed_by_ca "$BPP_HOME/state/ssl" "$BPP_HOME/state/ca"; then
     CERT_CHANGED=1
     emit cert null "Generowanie certyfikatu dla: $HOSTS"
-    cert_generate "$HOSTS" "$BPP_HOME/state/ssl" || fail "Nie udało się wygenerować certyfikatu"
+    cert_generate "$HOSTS" "$BPP_HOME/state/ssl" "$BPP_HOME/state/ca" || fail "Nie udało się wygenerować certyfikatu"
     hosts_render_env "$HOSTS" >"$BPP_HOME/state/hosts.env" || fail "Nie udało się zapisać hosts.env"
     printf '%s\n' "$HOSTS" >"$BPP_HOME/state/hosts"
   fi
@@ -218,6 +219,13 @@ cmd_logs() {
   bpp_compose logs --tail 500 --no-color "$@" || fail "docker compose logs nie powiodło się"
 }
 
+# ca-cert - certyfikat lokalnego CA (PEM) na stdout; aplikacja Windows dodaje go do zaufanych urzedow
+# biezacego uzytkownika, zeby przegladarka nie ostrzegala przed https://localhost:8443.
+cmd_ca-cert() {
+  [ -f "$BPP_HOME/state/ca/ca.pem" ] || fail "Brak certyfikatu CA (state/ca/ca.pem) - uruchom najpierw init lub start"
+  cat "$BPP_HOME/state/ca/ca.pem"
+}
+
 # compose <args...> - docker compose tego stosu (state/.env, project-directory) do recznej pracy:
 #   wsl -d BPP bpp-ctl compose ps | logs workerserver | up -d
 cmd_compose() {
@@ -274,8 +282,8 @@ main() {
   local cmd="${1:-}"
   [ "$#" -eq 0 ] || shift
   case "$cmd" in
-    init | start | stop | status | logs | diag | compose) "cmd_$cmd" "$@" ;;
-    *) fail "Nieznane polecenie: '${cmd}' (init|start|stop|status|logs|diag|compose)" ;;
+    init | start | stop | status | logs | diag | compose | ca-cert) "cmd_$cmd" "$@" ;;
+    *) fail "Nieznane polecenie: '${cmd}' (init|start|stop|status|logs|diag|compose|ca-cert)" ;;
   esac
 }
 

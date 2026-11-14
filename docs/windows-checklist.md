@@ -30,7 +30,9 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
 - [ ] **3.** Pasek postępu porusza się podczas pobierania obrazów (nie stoi na
   0% przez minuty).
   Wynik:
-- [ ] **4.** `https://localhost:8443/` → (po zaakceptowaniu certyfikatu)
+- [ ] **4.** `https://localhost:8443/` → (bez ostrzeżenia o certyfikacie, jeśli
+  w instalatorze zaakceptowano „BPP localhost CA”; inaczej po zaakceptowaniu
+  certyfikatu w przeglądarce)
   przekierowanie na `/setup/step/admin_user/`; POST formularza admina
   przechodzi (brak błędu CSRF), potem krok uczelni, potem logowanie.
   Wynik:
@@ -267,4 +269,34 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   Wynik:
 - [ ] **M8.** Windows Defender / SmartScreen nie blokuje mini instalatora ani
   pobranego `BPP-<wersja>.exe` (pliki niepodpisane — odnotuj ostrzeżenia).
+  Wynik:
+
+## Lokalne CA i zaufany certyfikat
+
+- [ ] **C1.** Po `bpp-ctl init` instalator pokazuje zapowiedź „Certyfikat BPP
+  dla przeglądarki”, a po OK systemowe „Ostrzeżenie o zabezpieczeniach”
+  (bez UAC) z nazwą „BPP localhost CA”. „Tak” → Edge i Chrome otwierają
+  `https://localhost:8443/` z kłódką, bez ostrzeżenia (po ponownym
+  uruchomieniu przeglądarki, jeśli była otwarta). Odnotuj Firefoksa.
+  Wynik:
+- [ ] **C2.** „Nie” w oknie Windows → instalacja kończy się poprawnie, strona
+  „Gotowe” wspomina o ostrzeżeniu przeglądarki, a menu ikonki ma pozycję
+  „Dodaj certyfikat BPP…”; po jej użyciu i „Tak” pozycja znika.
+  Wynik:
+- [ ] **C3.** `certmgr.msc` → Zaufane główne urzędy certyfikacji: jeden wpis
+  „BPP localhost CA”, z ograniczeniem nazw (DNS: localhost). W magazynie
+  komputera (`certlm.msc`) wpisu nie ma.
+  Wynik:
+- [ ] **C4.** Zmiana sieci (nowy adres IP w liście hostów) → certyfikat
+  serwera jest wymieniany, a przeglądarka dalej nie ostrzega i Windows o nic
+  nie pyta. Wejście po adresie LAN z tego samego komputera: też bez
+  ostrzeżenia.
+  Wynik:
+- [ ] **C5.** Ponowna instalacja (nowa dystrybucja = nowe CA): Windows pyta
+  o dodanie nowego certyfikatu i o usunięcie starego; w magazynie zostaje
+  jeden wpis.
+  Wynik:
+- [ ] **C6.** „Odinstaluj” → Windows pyta o usunięcie „BPP localhost CA”;
+  po „Tak” wpisu nie ma. Po „Nie” podsumowanie odinstalowania mówi, że
+  certyfikat został i jak go usunąć.
   Wynik:

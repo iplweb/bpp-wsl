@@ -11,7 +11,7 @@ setup() {
   mkdir -p "$WORK/state/ssl"
   printf 'BPP_IMAGE_TAG=x\nDJANGO_BPP_DB_NAME=bpp\nDJANGO_BPP_DB_USER=bpp\nDJANGO_BPP_DB_PASSWORD=pw\n' > "$WORK/state/.env"
   printf 'DJANGO_BPP_HOSTNAME=localhost\n' > "$WORK/state/hosts.env"
-  cert_generate "localhost,127.0.0.1" "$WORK/state/ssl"
+  cert_generate "localhost,127.0.0.1" "$WORK/state/ssl" "$WORK/state/ca"
   FIXTURE_SSL="$WORK/state/ssl"
 }
 

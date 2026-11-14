@@ -159,9 +159,30 @@ internal static class Uninstaller
             Step(problems, "wpisu RunOnce", registration.ClearRunOnce);
         }
 
+        if (cleanup.RemoveCertificate) await RemoveCertificateAsync(problems);
+
         if (cleanup.RemoveFirewallRule) await RemoveFirewallRuleAsync(problems);
 
         return new UninstallReport(cleanup, problems);
+    }
+
+    /// <summary>
+    /// Takes the BPP CA out of the user's trusted roots; its key went away with the distro. Windows asks the
+    /// user to confirm the removal with a dialog of its own.
+    /// </summary>
+    private static async Task RemoveCertificateAsync(List<string> problems)
+    {
+        try
+        {
+            if (!await Task.Run(TrustedRoot.RemoveAll))
+                problems.Add($"Certyfikat „{LocalCa.CommonName}” został wśród zaufanych certyfikatów (brak zgody " +
+                             "w oknie Windows). Można go usunąć w „Zarządzaj certyfikatami użytkownika” → " +
+                             "„Zaufane główne urzędy certyfikacji”.");
+        }
+        catch (System.Security.Cryptography.CryptographicException ex)
+        {
+            problems.Add($"Nie udało się usunąć certyfikatu „{LocalCa.CommonName}”: {ex.Message}");
+        }
     }
 
     private static async Task RemoveFirewallRuleAsync(List<string> problems)

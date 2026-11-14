@@ -234,6 +234,10 @@ internal sealed class InstallerFlow
                 await StopDistroAsync();
                 return s;
 
+            case Step.TrustCertificate:
+                _ui.SetStatus("Certyfikat dla przeglądarki…", null);
+                return s with { CertificateTrusted = await TrustCertificateAsync() };
+
             case Step.AddFirewall:
                 _ui.SetStatus("Udostępnianie w sieci lokalnej…", null);
                 int? code;
@@ -277,12 +281,49 @@ internal sealed class InstallerFlow
         }
     }
 
+    /// <summary>
+    /// Adds the distro's local CA to the current user's trusted roots, so the browser opens BPP without a
+    /// certificate warning. Nothing is elevated; Windows asks the user itself. Never fatal: without it the
+    /// browser simply warns, and the tray menu offers the certificate again.
+    /// </summary>
+    private async Task<bool> TrustCertificateAsync()
+    {
+        try
+        {
+            using var ca = await TrustedRoot.ReadFromDistroAsync(_wsl);
+            // the same CA is already there after an interrupted install that got this far: no dialog to announce
+            if (!await Task.Run(() => TrustedRoot.IsTrusted(ca)))
+            {
+                _ui.Announce("Certyfikat BPP dla przeglądarki",
+                    "BPP działa pod adresem https://localhost:8443 z certyfikatem wystawionym lokalnie, na tym " +
+                    "komputerze. Żeby przeglądarka (Edge, Chrome) nie ostrzegała przed tą stroną, instalator doda " +
+                    "certyfikat „" + LocalCa.CommonName + "” do zaufanych certyfikatów Twojego konta Windows.\n\n" +
+                    "Po kliknięciu OK Windows pokaże „Ostrzeżenie o zabezpieczeniach” z pytaniem, czy " +
+                    "zainstalować ten certyfikat. Certyfikat działa wyłącznie dla adresu localhost i adresów IP " +
+                    "— nie da się nim podszyć pod żadną stronę w internecie.\n\n" +
+                    "• „Tak” — BPP otworzy się bez ostrzeżeń.\n" +
+                    "• „Nie” — przeglądarka będzie ostrzegać o certyfikacie. Instalacja i tak zakończy się " +
+                    "poprawnie, a certyfikat można dodać później z menu ikonki BPP.");
+                _ui.SetStatus("Certyfikat dla przeglądarki — potwierdź w oknie Windows…", null);
+            }
+            var outcome = await Task.Run(() => TrustedRoot.Trust(ca));
+            _ui.AppendLog("Certyfikat: " + outcome);
+            return outcome != TrustOutcome.Declined;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Security.Cryptography.CryptographicException
+                                       or IOException or System.ComponentModel.Win32Exception)
+        {
+            _ui.AppendLog("Certyfikat: " + ex.Message);
+            return false;
+        }
+    }
+
     private void ShowFinal(Step step)
     {
         switch (step)
         {
             case Step.Done:
-                _ui.ShowDone(lanEnabled: _state.FirewallOk);
+                _ui.ShowDone(lanEnabled: _state.FirewallOk, certificateTrusted: _state.CertificateTrusted);
                 break;
             case Step.RestartRequired:
                 _ui.ShowRestart();

@@ -338,8 +338,20 @@ public class InstallerPlanTests
     // ---- 6. init ----
 
     [Fact]
-    public void Init_ready_adds_firewall_rule()
-        => Assert.Equal(S.AddFirewall, InstallerPlan.Next(After(S.RunInit) with { Init = InitOutcome.Ready }));
+    public void Init_ready_offers_the_certificate_then_adds_firewall_rule()
+    {
+        Assert.Equal(S.TrustCertificate, InstallerPlan.Next(After(S.RunInit) with { Init = InitOutcome.Ready }));
+        Assert.False(InstallerPlan.IsFinal(S.TrustCertificate));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Certificate_refusal_still_goes_on_to_the_firewall(bool trusted)
+        => Assert.Equal(S.AddFirewall, InstallerPlan.Next(After(S.TrustCertificate) with
+        {
+            Init = InitOutcome.Ready, CertificateTrusted = trusted,
+        }));
 
     [Fact]
     public void Init_error_stops_the_distro_then_is_a_retryable_error()

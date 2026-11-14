@@ -30,6 +30,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly Icon _icon;
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem _share;
+    private readonly ToolStripMenuItem _trust;
     private readonly NotifyIcon _tray;
     private readonly System.Windows.Forms.Timer _networkDebounce = new() { Interval = 2000 };
     private readonly SemaphoreSlim _startGate = new(1, 1); // never two `bpp-ctl start` at once
@@ -70,6 +71,11 @@ internal sealed class TrayContext : ApplicationContext
         {
             Visible = false,
         };
+        _trust = new ToolStripMenuItem("Dodaj certyfikat BPP (bez ostrzeżeń w przeglądarce)…", null,
+            (_, _) => Fire(TrustCertificateAsync))
+        {
+            Visible = false,
+        };
         _menu.Items.AddRange(new ToolStripItem[]
         {
             open,
@@ -77,6 +83,7 @@ internal sealed class TrayContext : ApplicationContext
             new ToolStripMenuItem("Terminal", null, (_, _) => OpenTerminal()),
             new ToolStripMenuItem("Wyślij diagnostykę do IPLweb…", null, (_, _) => SendDiagnostics(null)),
             _share,
+            _trust,
             new ToolStripSeparator(),
             new ToolStripMenuItem("Zatrzymaj", null, (_, _) => Fire(StopAndExitAsync)),
             new ToolStripMenuItem("Odinstaluj", null, (_, _) => Fire(UninstallAsync)),
@@ -151,6 +158,7 @@ internal sealed class TrayContext : ApplicationContext
                 _startedHosts = hosts;
                 SetState(TipRunning, running: true);
                 if (!wasRunning) _tray.ShowBalloonTip(5000, "BPP", ReadyBalloon, ToolTipIcon.Info);
+                await RefreshTrustItemAsync();
                 return;
             }
             ReportStartFailure(error ?? "bpp-ctl start zakończył się bez komunikatu „ready”.");
@@ -247,6 +255,64 @@ internal sealed class TrayContext : ApplicationContext
         EnableRelay();
         await UpdateRelayAsync(_startedHosts ?? LocalHosts.Current());
         _tray.ShowBalloonTip(5000, "BPP", "BPP jest dostępne w sieci lokalnej.", ToolTipIcon.Info);
+    }
+
+    // ---- certificate ----------------------------------------------------------------------------------
+
+    /// <summary>
+    /// Offers "Dodaj certyfikat BPP…" only while the distro's CA is not among the user's trusted roots (declined
+    /// in the installer, or the distro comes from a version without the local CA). Never prompts by itself.
+    /// </summary>
+    private async Task RefreshTrustItemAsync()
+    {
+        try
+        {
+            using var ca = await TrustedRoot.ReadFromDistroAsync(_wsl, _lifetime.Token);
+            var trusted = await Task.Run(() => TrustedRoot.IsTrusted(ca));
+            if (!_closing) _trust.Visible = !trusted;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Security.Cryptography.CryptographicException
+                                       or IOException or System.ComponentModel.Win32Exception)
+        {
+            Log("Certyfikat: " + ex.Message);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // closing
+        }
+    }
+
+    private async Task TrustCertificateAsync()
+    {
+        if (_closing) return;
+        _trust.Enabled = false;
+        try
+        {
+            using var ca = await TrustedRoot.ReadFromDistroAsync(_wsl, _lifetime.Token);
+            // Windows shows its own "Security Warning" dialog; nothing is elevated
+            var outcome = await Task.Run(() => TrustedRoot.Trust(ca));
+            Log("Certyfikat: " + outcome);
+            if (_closing || outcome == TrustOutcome.Declined) return;
+            _trust.Visible = false;
+            _tray.ShowBalloonTip(5000, "BPP", "Certyfikat BPP dodany. Uruchom przeglądarkę ponownie, " +
+                                                "jeśli nadal ostrzega.", ToolTipIcon.Info);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.Security.Cryptography.CryptographicException
+                                       or IOException or System.ComponentModel.Win32Exception)
+        {
+            Log("Certyfikat: " + ex.Message);
+            if (!_closing)
+                MessageBox.Show("Nie udało się dodać certyfikatu BPP:\n\n" + ex.Message, "BPP",
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+            // closing
+        }
+        finally
+        {
+            _trust.Enabled = true;
+        }
     }
 
     // ---- logs -----------------------------------------------------------------------------------------

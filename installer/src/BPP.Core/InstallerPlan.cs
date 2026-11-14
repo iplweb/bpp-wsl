@@ -18,6 +18,7 @@ public enum InstallerStep
     ImportDistro,
     RunInit,
     StopDistro,
+    TrustCertificate,
     AddFirewall,
     CreateShortcut,
     StopRunningBpp, // only after "Zatrzymaj BPP" on the PreflightFailed page
@@ -69,6 +70,12 @@ public sealed record InstallerState
     public bool ReinstallConfirmed { get; init; }
     public bool ImportOk { get; init; }
     public InitOutcome Init { get; init; }
+
+    /// <summary>
+    /// The distro's local CA is among the user's trusted roots after <see cref="InstallerStep.TrustCertificate"/>;
+    /// false = the browser warns about the certificate, as it would for any self-signed one.
+    /// </summary>
+    public bool CertificateTrusted { get; init; }
 
     /// <summary>Firewall rule present after <see cref="InstallerStep.AddFirewall"/>; false = BPP stays localhost-only.</summary>
     public bool FirewallOk { get; init; }
@@ -127,10 +134,11 @@ public static class InstallerPlan
         InstallerStep.RunInit => s.Init switch
         {
             InitOutcome.NotRun => InstallerStep.RunInit, // after Retry
-            InitOutcome.Ready => InstallerStep.AddFirewall,
+            InitOutcome.Ready => InstallerStep.TrustCertificate,
             _ => InstallerStep.StopDistro,
         },
         InstallerStep.StopDistro => s.Init == InitOutcome.Cancelled ? InstallerStep.Cancelled : InstallerStep.InitFailed,
+        InstallerStep.TrustCertificate => InstallerStep.AddFirewall, // refusal only means a browser warning
         InstallerStep.AddFirewall => InstallerStep.CreateShortcut, // refusal only means localhost-only
         InstallerStep.CreateShortcut => InstallerStep.Done,
         var final => throw new InvalidOperationException($"{final} jest stroną końcową, nie krokiem."),
