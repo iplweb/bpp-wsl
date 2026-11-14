@@ -13,7 +13,7 @@ internal sealed class WelcomePage : Page
     {
         AddRow(Title("Zainstaluj BPP (wersja do testów)"));
         AddRow(Body("Instalacja do wypróbowania BPP, nie do pracy produkcyjnej: dane nie mają kopii zapasowych " +
-                    "i są usuwane przy odinstalowaniu oraz instalacji nowszej wersji. Instalator pobierze ok. 2 GB."));
+                    "i są usuwane przy odinstalowaniu oraz instalacji nowszej wersji. Instalator pobierze ok. 800 MB."));
         AddRow(Body("BPP jest udostępniane na licencji MIT, „tak jak jest”, bez jakiejkolwiek gwarancji. Autor ani " +
                     "posiadacz praw autorskich nie ponoszą odpowiedzialności za szkody ani inne skutki użycia:"));
         AddRow(new TextBox

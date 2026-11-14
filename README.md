@@ -63,7 +63,7 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
   instalator pokaże ostrzeżenie z przyciskiem **Zainstaluj mimo to**. BPP
   może wtedy działać wolno albo zatrzymać się, gdy zabraknie pamięci lub
   miejsca,
-- internet (instalator pobiera ok. 2 GB) — bez serwera proxy,
+- internet (instalator pobiera ok. 800 MB) — bez serwera proxy,
 - wolny port **8443**,
 - hasło administratora **tylko wtedy**, gdy trzeba włączyć WSL albo otworzyć
   BPP dla innych komputerów w sieci. Resztę robi zwykły użytkownik.

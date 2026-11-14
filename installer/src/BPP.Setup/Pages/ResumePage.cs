@@ -14,7 +14,7 @@ internal sealed class ResumePage : Page
         AddRow(Body("1. Sprawdzi WSL i w razie potrzeby go zaktualizuje. Może wtedy pojawić się czarne okno " +
                     "konsoli z postępem oraz okno administratora Windows z pytaniem o zgodę — instalator " +
                     "uprzedzi o tym osobnym komunikatem."));
-        AddRow(Body("2. Pobierze dystrybucję i obrazy BPP (ok. 2 GB) — to potrwa od kilku do kilkunastu minut."));
+        AddRow(Body("2. Pobierze dystrybucję i obrazy BPP (ok. 800 MB) — to potrwa od kilku do kilkunastu minut."));
         AddRow(Body("3. Uruchomi BPP i zapyta o zgodę na udostępnienie go w sieci lokalnej."));
         AddButtons(Action("OK", resume), Action("Później", close));
     }

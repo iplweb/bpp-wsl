@@ -62,7 +62,7 @@ public static class InstallStages
         "Sprawdzenie komputera i włączenie WSL (Linux w systemie Windows)",
         "Pobranie i instalacja aktualnej wersji WSL z internetu",
         "Pobranie dystrybucji BPP (ok. 170 MB)",
-        "Instalacja BPP (pobranie obrazów, ok. 2 GB)",
+        "Instalacja BPP (pobranie obrazów, ok. 550 MB)",
         "Pierwszy start BPP: tworzenie bazy danych i uruchamianie usług",
     };
 
