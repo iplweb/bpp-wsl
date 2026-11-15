@@ -314,4 +314,15 @@ public class AppArgsTests
         Assert.Null(AppArgs.Parse(new[] { "--setup", "--demo", "disney" })); // not offered
         Assert.Null(AppArgs.Parse(new[] { "--setup", "--demo" }));
     }
+
+    [Fact]
+    public void Autostart_choice_survives_the_restart()
+    {
+        Assert.False(AppArgs.Parse(new[] { "--setup" })!.Autostart);
+        Assert.Equal("--setup --resume --demo lem --autostart",
+            new AppArgs(AppMode.Setup, Demo: "lem", Autostart: true).ResumeCommandArgs());
+        Assert.True(AppArgs.Parse(new[] { "--setup", "--resume", "--autostart" })!.Autostart);
+        Assert.Null(AppArgs.Parse(new[] { "--setup", "--autostart", "--autostart" }));
+        Assert.Null(AppArgs.Parse(new[] { "--autostart" })); // a setup option only
+    }
 }

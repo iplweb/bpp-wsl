@@ -127,8 +127,10 @@ Z innych komputerów w sieci BPP jest dostępne pod `https://<adres-IP-tego-komp
 
 ## Codzienne używanie
 
-BPP **nie startuje samo** z Windowsem. Uruchamiasz je skrótem **BPP** w Menu
-Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
+BPP domyślnie **nie startuje samo** z Windowsem: uruchamiasz je skrótem **BPP**
+w Menu Start. Żeby startowało po zalogowaniu, zaznacz w instalatorze
+**Uruchamiaj BPP po zalogowaniu do Windows** albo włącz to później w menu
+ikonki. Po uruchomieniu w zasobniku (obok zegara) pojawia się ikonka z menu:
 
 | Pozycja | Co robi |
 |---|---|
@@ -137,6 +139,7 @@ Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
 | **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów; **Zapisz do pliku…** zapisuje go jako plik tekstowy |
 | **Terminal** | otwiera konsolę Linuksa (root) w dystrybucji BPP, w katalogu `/opt/bpp` — do ręcznych napraw (`bpp-ctl compose ps` itd.) |
 | **Udostępnij w sieci lokalnej…** | dodaje regułę zapory, gdy wcześniej jej odmówiono |
+| **Uruchamiaj po zalogowaniu do Windows** | włącza i wyłącza start BPP razem z Windowsem (dla tego użytkownika) |
 | **Uruchom ponownie** | uruchamia jeszcze raz usługi BPP — gdy któraś linia stanu jest czerwona |
 | **Zatrzymaj** | wyłącza BPP i zwalnia pamięć |
 | **Odinstaluj** | usuwa BPP razem z danymi |

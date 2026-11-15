@@ -5,12 +5,14 @@ public enum AppMode { Tray, Uninstall, Setup }
 /// <summary>
 /// Command line of the one BPP.exe (tray and installer in one file):
 /// <c>BPP.exe [--tray]</c>, <c>BPP.exe --uninstall</c>,
-/// <c>BPP.exe --setup [--resume] [--install-anyway] [--rootfs &lt;file&gt;] [--demo &lt;theme&gt;]</c>.
+/// <c>BPP.exe --setup [--resume] [--install-anyway] [--rootfs &lt;file&gt;] [--demo &lt;theme&gt;] [--autostart]</c>.
 /// </summary>
 /// <param name="Demo">Demo data theme (a <see cref="DemoThemes"/> key) chosen before a restart; null = none.</param>
+/// <param name="Autostart">"Start BPP when I sign in to Windows", ticked before a restart.</param>
 public sealed record AppArgs(AppMode Mode, bool Resume = false, bool InstallAnyway = false, string? Rootfs = null,
-    string? Demo = null)
+    string? Demo = null, bool Autostart = false)
 {
+    public const string AutostartArg = "--autostart";
     public const string DemoArg = "--demo";
     public const string Setup = "--setup";
     public const string ResumeArg = "--resume";
@@ -47,6 +49,9 @@ public sealed record AppArgs(AppMode Mode, bool Resume = false, bool InstallAnyw
                 case DemoArg when result.Demo == null && i + 1 < args.Count && DemoThemes.IsValid(args[i + 1]):
                     result = result with { Demo = args[++i] };
                     break;
+                case AutostartArg when !result.Autostart:
+                    result = result with { Autostart = true };
+                    break;
                 default:
                     return null;
             }
@@ -61,6 +66,7 @@ public sealed record AppArgs(AppMode Mode, bool Resume = false, bool InstallAnyw
         if (InstallAnyway) parts.Add(InstallAnywayArg);
         if (Rootfs != null) parts.Add($"{RootfsArg} \"{Rootfs}\"");
         if (Demo != null) parts.Add($"{DemoArg} {Demo}");
+        if (Autostart) parts.Add(AutostartArg);
         return string.Join(" ", parts);
     }
 }

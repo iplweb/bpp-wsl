@@ -138,9 +138,13 @@ internal sealed class SetupForm : Form
     private void Install() => RunFlow(f => f.RunAsync());
 
     /// <summary>"Zainstaluj" on the welcome page; <paramref name="demoTheme"/> is null when demo data was not ticked.</summary>
-    private void InstallWith(string? demoTheme)
+    private void InstallWith(string? demoTheme, bool autostart)
     {
-        if (_flow != null) _flow.DemoTheme = demoTheme;
+        if (_flow != null)
+        {
+            _flow.DemoTheme = demoTheme;
+            _flow.Autostart = autostart;
+        }
         Install();
     }
 

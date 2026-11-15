@@ -382,3 +382,24 @@ uruchamiania jej), co mówi `bpp-ctl status` o Dockerze i usługach, i czy
   Wynik:
 - [ ] **S6.** Kropka i linie menu są czytelne przy skalowaniu 100% i 150%.
   Wynik:
+
+## Autostart i ponowna instalacja bez pobierania
+
+- [ ] **A1.** Instalacja z zaznaczonym „Uruchamiaj BPP po zalogowaniu do
+  Windows”: po restarcie i zalogowaniu ikonka pojawia się sama i BPP wstaje.
+  Bez zaznaczenia — nie pojawia się.
+  Wynik:
+- [ ] **A2.** Menu ikonki → „Uruchamiaj po zalogowaniu do Windows”: ptaszek
+  zgadza się z wpisem `BPP` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,
+  kliknięcie go przełącza.
+  Wynik:
+- [ ] **A3.** Wybór autostartu przetrwa restart w trakcie instalacji (włączanie
+  WSL): po wznowieniu i zakończeniu wpis `Run` jest taki, jak zaznaczono.
+  Wynik:
+- [ ] **A4.** Odinstalowanie usuwa wpis `Run`.
+  Wynik:
+- [ ] **A5.** Druga instalacja tej samej wersji na istniejącą („Zainstaluj
+  ponownie”): krok pobierania dystrybucji kończy się od razu (plik
+  `%LOCALAPPDATA%\BPP\download\bpp-rootfs-….tar.gz` został po pierwszej), w logu
+  nie ma pobierania 170 MB.
+  Wynik:

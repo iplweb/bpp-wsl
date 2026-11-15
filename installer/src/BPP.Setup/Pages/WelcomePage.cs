@@ -2,14 +2,15 @@ namespace BPP.Setup.Pages;
 
 /// <summary>
 /// Test-installation notice, the BPP MIT licence and its acceptance ("Zainstaluj" needs the checkbox), and the
-/// optional demo data with its theme (on by default, with Lem's or the Witcher's world picked at random).
+/// optional demo data with its theme (on by default, with Lem's or the Witcher's world picked at random), and
+/// the choice to start BPP at every sign-in (off by default: BPP takes a few GB of memory).
 /// </summary>
 internal sealed class WelcomePage : Page
 {
     /// <summary>Keeps the licence text readable now that the demo data rows sit below it.</summary>
-    public override int ExtraHeight => 90;
+    public override int ExtraHeight => 120;
 
-    public WelcomePage(Action<string?> install, string licence)
+    public WelcomePage(Action<string?, bool> install, string licence)
     {
         AddRow(Title("Zainstaluj BPP (wersja do testów)"));
         AddRow(Body("Instalacja do wypróbowania BPP, nie do pracy produkcyjnej: dane nie mają kopii zapasowych " +
@@ -59,8 +60,17 @@ internal sealed class WelcomePage : Page
         AddRow(Body("Przykładowe dane to ok. 200 autorów i 1500 publikacji w fikcyjnej uczelni — do obejrzenia " +
                     "BPP bez wpisywania własnych. Bez nich BPP startuje puste."));
 
+        var autostart = new CheckBox
+        {
+            Text = "Uruchamiaj BPP po zalogowaniu do Windows (można zmienić później w menu ikonki)",
+            AutoSize = true,
+            MaximumSize = new Size(Width80, 0),
+            Margin = new Padding(0, 4, 0, 4),
+        };
+        AddRow(autostart);
+
         var installButton = Action("Zainstaluj",
-            () => install(demo.Checked ? BPP.Core.DemoThemes.All[theme.SelectedIndex].Key : null));
+            () => install(demo.Checked ? BPP.Core.DemoThemes.All[theme.SelectedIndex].Key : null, autostart.Checked));
         installButton.Enabled = false;
         accept.CheckedChanged += (_, _) => installButton.Enabled = accept.Checked;
         AddButtons(installButton);

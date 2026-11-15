@@ -40,6 +40,8 @@ internal sealed class TrayContext : ApplicationContext
     private readonly ContextMenuStrip _menu;
     private readonly ToolStripMenuItem[] _statusItems;
     private readonly ToolStripMenuItem _restart;
+    private readonly ToolStripMenuItem _autostart;
+    private readonly Registration _registration = new();
     private readonly ToolStripMenuItem _share;
     private readonly ToolStripMenuItem _trust;
     private readonly NotifyIcon _tray;
@@ -103,6 +105,8 @@ internal sealed class TrayContext : ApplicationContext
         {
             Visible = false,
         };
+        _autostart = new ToolStripMenuItem("Uruchamiaj po zalogowaniu do Windows", null, (_, _) => ToggleAutostart());
+        _menu.Opening += (_, _) => RefreshAutostartItem(); // the entry may have been changed outside
         _menu.Items.AddRange(_statusItems.Cast<ToolStripItem>().ToArray());
         _menu.Items.AddRange(new ToolStripItem[]
         {
@@ -113,6 +117,7 @@ internal sealed class TrayContext : ApplicationContext
             new ToolStripMenuItem("Wyślij diagnostykę do IPLweb…", null, (_, _) => SendDiagnostics(null)),
             _share,
             _trust,
+            _autostart,
             new ToolStripSeparator(),
             _restart,
             new ToolStripMenuItem("Zatrzymaj", null, (_, _) => Fire(StopAndExitAsync)),
@@ -440,6 +445,36 @@ internal sealed class TrayContext : ApplicationContext
         {
             _trust.Enabled = true;
         }
+    }
+
+    // ---- autostart ------------------------------------------------------------------------------------
+
+    private void RefreshAutostartItem()
+    {
+        try
+        {
+            _autostart.Checked = _registration.IsAutostartEnabled();
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            Log("Autostart: " + ex.Message);
+        }
+    }
+
+    private void ToggleAutostart()
+    {
+        if (_closing) return;
+        try
+        {
+            _registration.SetAutostart(AppPaths.TrayExe, !_registration.IsAutostartEnabled());
+        }
+        catch (Exception ex) when (ex is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            Log("Autostart: " + ex.Message);
+            MessageBox.Show("Nie udało się zmienić ustawienia autostartu: " + ex.Message, "BPP",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        RefreshAutostartItem();
     }
 
     // ---- logs -----------------------------------------------------------------------------------------

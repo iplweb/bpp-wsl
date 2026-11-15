@@ -55,6 +55,7 @@ internal sealed class InstallerFlow
         // "--install-anyway" (after a restart): the user already accepted too little RAM / disk
         _state = new InstallerState { InstallAnyway = args.InstallAnyway };
         DemoTheme = args.Demo;
+        Autostart = args.Autostart;
         _wsl.LogLine += _ui.AppendLog; // raised from two pump threads; AppendLog is thread-safe
         _keepAlive.Log += _ui.AppendLog;
     }
@@ -63,6 +64,9 @@ internal sealed class InstallerFlow
 
     /// <summary>Demo data theme chosen on the welcome page (or carried over a restart with <c>--demo</c>); null = none.</summary>
     public string? DemoTheme { get; set; }
+
+    /// <summary>"Start BPP when I sign in to Windows" from the welcome page (or carried over a restart).</summary>
+    public bool Autostart { get; set; }
 
     /// <summary>True while <c>bpp-ctl init</c> runs — the only step that can be cancelled.</summary>
     public bool InitRunning => _initCts != null;
@@ -215,7 +219,7 @@ internal sealed class InstallerFlow
             case Step.ScheduleResume:
                 // BPP.exe in the program folder: the copy the mini installer downloaded may be gone after the restart
                 _registration.SetRunOnce(
-                    $"\"{AppPaths.TrayExe}\" {(_args with { InstallAnyway = s.InstallAnyway, Demo = DemoTheme }).ResumeCommandArgs()}");
+                    $"\"{AppPaths.TrayExe}\" {(_args with { InstallAnyway = s.InstallAnyway, Demo = DemoTheme, Autostart = Autostart }).ResumeCommandArgs()}");
                 return s;
 
             case Step.CheckDistro:
@@ -289,6 +293,8 @@ internal sealed class InstallerFlow
 
             case Step.RegisterUninstall:
                 _registration.RegisterUninstall(AppPaths.TrayExe, Version);
+                // also clears an entry left by a previous installation when the box is not ticked this time
+                _registration.SetAutostart(AppPaths.TrayExe, Autostart);
                 return s;
 
             case Step.CreateShortcut:
@@ -648,7 +654,9 @@ internal sealed class InstallerFlow
 
     /// <summary>
     /// Imports the verified rootfs. Only a failing <c>wsl --import</c> returns false (the plan may then offer
-    /// enable-wsl); the downloaded copy is kept until an import succeeds, so that loop does not download again.
+    /// enable-wsl). The downloaded copy (~170 MB) stays in the download folder also after the import: installing
+    /// the same version again finds it there, checks its hash and does not download it a second time. Copies of
+    /// other versions are removed by <see cref="SweepStaleFiles"/>, and the uninstaller removes the folder.
     /// </summary>
     private async Task<bool> ImportAsync()
     {
@@ -666,7 +674,6 @@ internal sealed class InstallerFlow
             return false;
         }
 
-        if (tar == RootfsDownloadPath) TryDelete(tar); // ~170 MB no longer needed; a --rootfs file is the user's
         await _wsl.TrySetSparseAsync();
         return true;
     }

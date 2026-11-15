@@ -11,6 +11,8 @@ public sealed class Registration
     private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\BPP";
     private const string RunOnceKey = @"Software\Microsoft\Windows\CurrentVersion\RunOnce";
     private const string RunOnceName = "BPP-Setup";
+    private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunName = "BPP";
 
     private static string ShortcutPath
         => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Programs), "BPP.lnk");
@@ -58,6 +60,23 @@ public sealed class Registration
     public void RemoveStartMenuShortcut()
     {
         if (File.Exists(ShortcutPath)) File.Delete(ShortcutPath);
+    }
+
+    /// <summary>
+    /// Whether Windows starts the tray when this user signs in (a value under HKCU\…\Run). Windows' own
+    /// switch in Settings → Apps → Startup can still turn that entry off; it is not looked at here.
+    /// </summary>
+    public bool IsAutostartEnabled()
+    {
+        using var key = Registry.CurrentUser.OpenSubKey(RunKey);
+        return key?.GetValue(RunName) is string { Length: > 0 };
+    }
+
+    public void SetAutostart(string trayExe, bool enabled)
+    {
+        using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
+        if (enabled) key.SetValue(RunName, $"\"{trayExe}\"");
+        else key.DeleteValue(RunName, throwOnMissingValue: false);
     }
 
     public void SetRunOnce(string cmd)

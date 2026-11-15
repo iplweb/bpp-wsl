@@ -157,6 +157,7 @@ internal static class Uninstaller
             Step(problems, "skrótu w Menu Start", registration.RemoveStartMenuShortcut);
             Step(problems, "wpisu w „Aplikacje”", registration.UnregisterUninstall);
             Step(problems, "wpisu RunOnce", registration.ClearRunOnce);
+            Step(problems, "wpisu autostartu", () => registration.SetAutostart(AppPaths.TrayExe, enabled: false));
         }
 
         if (cleanup.RemoveCertificate) await RemoveCertificateAsync(problems);
