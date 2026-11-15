@@ -326,6 +326,16 @@ _pull_fracs() {
   [[ "${lines[-1]}" == *limit* ]]
 }
 
+@test "start links .env to state/.env, so a hand-typed docker compose finds the variables" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  [ "$(readlink "$WORK/.env")" = state/.env ]
+  grep -q '^BPP_IMAGE_TAG=t1$' "$WORK/.env"
+  rm "$WORK/.env"
+  run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
+  [ "$status" -eq 0 ]
+  [ "$(readlink "$WORK/.env")" = state/.env ]
+}
+
 @test "start without init -> error event" {
   run bash -c '"$CTL" start --hosts localhost 2>/dev/null'
   [ "$status" -eq 1 ]

@@ -10,6 +10,13 @@ bpp_compose() {
     --env-file "$BPP_HOME/state/.env" "$@"
 }
 
+# state_link_env - makes $BPP_HOME/.env a link to state/.env. Compose reads .env of the project directory
+# by itself, so a plain `docker compose ps` typed in /opt/bpp (the tray's "Terminal") finds BPP_IMAGE_TAG
+# and the rest without --env-file. bpp-ctl does not depend on it: bpp_compose names the file explicitly.
+state_link_env() {
+  [ "$(readlink "$BPP_HOME/.env" 2>/dev/null)" = state/.env ] || ln -sfn state/.env "$BPP_HOME/.env"
+}
+
 # state_ensure_env - tworzy state/.env (0600) tylko gdy nie istnieje, wiec
 # haslo bazy i SECRET_KEY przetrwaja kolejne wywolania init.
 state_ensure_env() {

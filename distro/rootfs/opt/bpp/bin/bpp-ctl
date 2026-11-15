@@ -210,6 +210,7 @@ cmd_start() {
   hwclock -s 2>/dev/null || true
   emit config null "Sprawdzanie konfiguracji"
   [ -f "$BPP_HOME/state/.env" ] || fail "Brak konfiguracji (state/.env) - uruchom najpierw init"
+  state_link_env || echo "Nie udało się utworzyć dowiązania $BPP_HOME/.env (ręczny docker compose wymaga --env-file state/.env)." >&2
   wait_docker event
 
   ensure_hosts_config

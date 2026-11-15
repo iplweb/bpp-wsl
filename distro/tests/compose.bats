@@ -37,6 +37,30 @@ teardown() { rm -rf "$WORK"; }
   [ "$status" -eq 0 ]
 }
 
+@test "webserver waits for nothing, so it is up before the application" {
+  run bash -c "cd $WORK && docker compose --env-file state/.env config --format json"
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -c '.services.webserver.depends_on // {}')" = '{}' ]
+}
+
+@test "without the application nginx serves the starting page with status 503" {
+  net="bpp-test-$$-$RANDOM"
+  docker network create "$net" >/dev/null
+  cid="$(docker run -d --rm --network "$net" -v "$WORK/nginx/nginx.conf:/etc/nginx/nginx.conf:ro" \
+    -v "$WORK/nginx/starting.html:/usr/share/nginx/bpp/starting.html:ro" -v "$FIXTURE_SSL:/etc/nginx/ssl:ro" nginx:1.28)"
+  for _ in $(seq 1 20); do
+    docker exec "$cid" curl -fs http://127.0.0.1/healthz >/dev/null 2>&1 && break
+    sleep 0.5
+  done
+  run docker exec "$cid" curl -sk --max-time 20 -D - https://127.0.0.1/some/page/
+  docker rm -f "$cid" >/dev/null
+  docker network rm "$net" >/dev/null
+  [[ "${lines[0]}" == *" 503"* ]]
+  [[ "$output" == *"BPP uruchamia się"* ]]
+  [[ "$output" == *'http-equiv="refresh"'* ]]
+  [[ "$output" == *"Retry-After: 5"* ]]
+}
+
 @test "no HSTS anywhere" {
   run grep -ri strict-transport "$BPP_HOME/nginx/nginx.conf"
   [[ "$output" == *proxy_hide_header* ]]

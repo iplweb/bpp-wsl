@@ -170,12 +170,12 @@ services:
       - "8443:443"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/starting.html:/usr/share/nginx/bpp/starting.html:ro
       - ./state/ssl:/etc/nginx/ssl:ro
       - staticfiles:/var/www/html/staticroot:ro
       - media:/var/www/html/mediaroot:ro
-    depends_on:
-      appserver:
-        condition: service_started
+    # No depends_on: nginx resolves appserver at request time (see nginx.conf), so it starts first and
+    # answers with the "BPP uruchamia się" page until the application is up.
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://127.0.0.1/healthz"]
       interval: 10s

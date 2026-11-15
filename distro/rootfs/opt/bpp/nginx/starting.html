@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Served by nginx (status 503) while the application behind it does not answer yet. Reloads the address
+     the user asked for, so once BPP is up they land where they wanted to go. -->
+<meta http-equiv="refresh" content="5">
+<title>BPP uruchamia się…</title>
+<style>
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Segoe UI", system-ui, sans-serif; color: #1f2937; background: #f3f4f6;
+  }
+  main { text-align: center; padding: 2rem; max-width: 32rem; }
+  .spinner {
+    width: 3rem; height: 3rem; margin: 0 auto 1.5rem;
+    border: 0.35rem solid #d1d5db; border-top-color: #2563eb; border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  h1 { font-size: 1.6rem; margin: 0 0 0.75rem; }
+  p { margin: 0.5rem 0; line-height: 1.5; color: #4b5563; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 4s; } }
+  @media (prefers-color-scheme: dark) {
+    body { color: #e5e7eb; background: #111827; }
+    p { color: #9ca3af; }
+    .spinner { border-color: #374151; border-top-color: #60a5fa; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="spinner" role="status" aria-label="Trwa uruchamianie"></div>
+  <h1>BPP uruchamia się…</h1>
+  <p>Baza danych i aplikacja jeszcze startują. Ta strona odświeża się sama co kilka sekund.</p>
+  <p>Zwykle trwa to do kilku minut. Jeśli dłużej, sprawdź stan w menu ikonki BPP obok zegara.</p>
+</main>
+</body>
+</html>
