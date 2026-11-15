@@ -3,6 +3,7 @@
 # Sterowanie: MOCK_IMAGES (lista obrazow, \n), MOCK_HEALTH (starting|healthy|unhealthy|absent),
 # MOCK_WEBSERVER_RUNNING=1, MOCK_UP_RC, MOCK_PULL_RC, MOCK_CONFIG_RC,
 # MOCK_PRESENT_IMAGES (obrazy "juz pobrane" dla `docker image inspect`, oddzielone spacja),
+# MOCK_SERVICES (uslugi dla `config --services`, \n), MOCK_PS_JSON (wiersze `ps --format json` zamiast domyslnego),
 # MOCK_DOCKER_INFO_FAILS=N (pierwsze N wywolan `docker info` konczy sie bledem - demon jeszcze nie wstal).
 # Jak prawdziwy compose: `config` bez state/hosts.env (env_file) konczy sie bledem.
 echo "docker $*" >>"${MOCK_DOCKER_LOG:?}"
@@ -24,11 +25,19 @@ if [ "${args[0]:-}" = compose ]; then
         exit 1
       }
       [ "${MOCK_CONFIG_RC:-0}" = 0 ] || exit "$MOCK_CONFIG_RC"
+      if [[ " ${rest[*]} " == *" --services "* ]]; then
+        printf '%b\n' "${MOCK_SERVICES:-appserver}"
+        exit 0
+      fi
       printf '%b\n' "${MOCK_IMAGES:-iplweb/bpp_appserver:t1\npostgres:18.4\nredis:8.6.2}" ;;
     up) [ -z "${MOCK_UP_SLEEP:-}" ] || sleep "$MOCK_UP_SLEEP"; exit "${MOCK_UP_RC:-0}" ;;
     ps)
       if [[ " ${rest[*]} " == *" -q "* ]]; then
         [ "${MOCK_WEBSERVER_RUNNING:-0}" = 1 ] && echo abc123
+        exit 0
+      fi
+      if [ -n "${MOCK_PS_JSON:-}" ]; then
+        printf '%b\n' "$MOCK_PS_JSON"
         exit 0
       fi
       h="${MOCK_HEALTH:-healthy}"

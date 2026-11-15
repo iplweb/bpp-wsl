@@ -337,11 +337,38 @@ _pull_fracs() {
   run "$CTL" status
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" = 1 ]
-  [ "$(echo "$output" | jq -c .)" = '{"running":true,"health":"healthy"}' ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":true,"health":"healthy","docker":true,"services":[{"name":"appserver","state":"running","health":"healthy"}]}' ]
   MOCK_HEALTH=absent run "$CTL" status
-  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent"}' ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":true,"services":[{"name":"appserver","state":"absent","health":""}]}' ]
   MOCK_HEALTH=starting run "$CTL" status
-  [ "$(echo "$output" | jq -c .)" = '{"running":true,"health":"starting"}' ]
+  [ "$(echo "$output" | jq -c '[.running, .health]')" = '[true,"starting"]' ]
+}
+
+@test "status lists every service in compose order, also those without a container or a healthcheck" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  MOCK_SERVICES='dbserver\nappserver\ndenorm-queue\nwebserver' \
+    MOCK_PS_JSON='{"Service":"appserver","State":"running","Health":"unhealthy"}\n{"Service":"dbserver","State":"exited","Health":""}\n{"Service":"denorm-queue","State":"running","Health":""}' \
+    run "$CTL" status
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" = 1 ]
+  [ "$(echo "$output" | jq -c '.services | map([.name, .state, .health])')" = \
+    '[["dbserver","exited",""],["appserver","running","unhealthy"],["denorm-queue","running",""],["webserver","absent",""]]' ]
+  [ "$(echo "$output" | jq -c '[.running, .health]')" = '[true,"unhealthy"]' ]
+}
+
+@test "status with compose printing one array (older versions)" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  MOCK_PS_JSON='[{"Service":"appserver","State":"running","Health":"healthy"}]' run "$CTL" status
+  [ "$(echo "$output" | jq -c '.services')" = '[{"name":"appserver","state":"running","health":"healthy"}]' ]
+}
+
+@test "status with Docker down: docker false, no services, no compose call, exit 0" {
+  "$CTL" init --hosts localhost >/dev/null 2>&1
+  : >"$MOCK_DOCKER_LOG"
+  MOCK_DOCKER_INFO_FAILS=99 run "$CTL" status
+  [ "$status" -eq 0 ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":false,"services":[]}' ]
+  ! grep -q 'docker compose' "$MOCK_DOCKER_LOG"
 }
 
 @test "stop and logs call compose" {

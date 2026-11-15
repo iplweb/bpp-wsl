@@ -262,13 +262,39 @@ cmd_stop() {
   bpp_compose stop >&2 || fail "docker compose stop nie powiodło się"
 }
 
+# status - one JSON line for the tray icon, which asks every few seconds:
+#   {"running":bool,"health":"...","docker":bool,"services":[{"name":"...","state":"...","health":"..."},...]}
+# "docker" says whether the daemon answers; "services" lists every service of the stack in compose order,
+# with the container's state and health as Docker reports them (a service without a container has state
+# "absent", one without a healthcheck has an empty health). "running" and "health" describe appserver.
+# Never waits for Docker and never fails.
 cmd_status() {
-  local h running=false state=""
-  h="$(appserver_health)"
-  [ "$h" = absent ] ||
-    state="$(bpp_compose ps --format json appserver 2>/dev/null | jq -rs 'flatten | .[0].State // ""' 2>/dev/null || true)"
-  [ "$state" = running ] && running=true
-  jq -cn --argjson running "$running" --arg health "$h" '{running: $running, health: $health}'
+  local docker=false names="" ps="" rows=""
+  if timeout 10 docker info >/dev/null 2>&1; then
+    docker=true
+    names="$(bpp_compose config --services 2>/dev/null || true)"
+    ps="$(bpp_compose ps --all --format json 2>/dev/null || true)"
+  fi
+  # compose prints one object per line or, in older versions, one array
+  rows="$(jq -cs 'flatten' <<<"$ps" 2>/dev/null || true)"
+  [ -n "$rows" ] || rows='[]'
+  jq -cn --argjson docker "$docker" --arg names "$names" --argjson rows "$rows" '
+    ($names | split("\n") | map(select(length > 0))) as $expected
+    | ($rows | map({name: .Service, state: (.State // ""), health: (.Health // "")})) as $have
+    | ($expected + (($have | map(.name)) - $expected)) as $all
+    | [$all[] as $n | (($have | map(select(.name == $n)) | .[0]) // {name: $n, state: "absent", health: ""})]
+      as $services
+    | (($services | map(select(.name == "appserver")) | .[0]) // {state: "absent", health: ""}) as $app
+    | {
+        running: ($app.state == "running"),
+        health: (
+          if $app.state == "absent" then "absent"
+          elif ($app.health | IN("starting", "healthy", "unhealthy")) then $app.health
+          elif ($app.state | IN("running", "restarting")) then "starting"
+          else "absent" end),
+        docker: $docker,
+        services: $services
+      }'
 }
 
 cmd_logs() {

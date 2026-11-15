@@ -132,12 +132,17 @@ Start. Wtedy w zasobniku (obok zegara) pojawia się ikonka z menu:
 
 | Pozycja | Co robi |
 |---|---|
+| **Dystrybucja WSL / Docker / Usługi / Strona** | cztery linie stanu z kolorową kropką (zielona — działa, żółta — uruchamia się, czerwona — problem), odświeżane co 20 sekund; kliknięcie otwiera logi |
 | **Otwórz BPP** | otwiera BPP w przeglądarce |
 | **Pokaż logi** | pokazuje dziennik — przydatny przy zgłaszaniu problemów; **Zapisz do pliku…** zapisuje go jako plik tekstowy |
 | **Terminal** | otwiera konsolę Linuksa (root) w dystrybucji BPP, w katalogu `/opt/bpp` — do ręcznych napraw (`bpp-ctl compose ps` itd.) |
 | **Udostępnij w sieci lokalnej…** | dodaje regułę zapory, gdy wcześniej jej odmówiono |
+| **Uruchom ponownie** | uruchamia jeszcze raz usługi BPP — gdy któraś linia stanu jest czerwona |
 | **Zatrzymaj** | wyłącza BPP i zwalnia pamięć |
 | **Odinstaluj** | usuwa BPP razem z danymi |
+
+Kropka w rogu samej ikonki pokazuje stan ogólny (najgorszą z czterech linii),
+a dymek po najechaniu myszą — co nie działa.
 
 ## Odinstalowanie
 

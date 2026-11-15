@@ -357,3 +357,28 @@ jeden bezczynny proces `wsl.exe -d BPP -u root -- cat`.
 - [ ] **K4.** Zabicie BPP.exe w Menedżerze zadań: proces `wsl.exe … cat`
   znika sam, a dystrybucja po kilkunastu sekundach się zatrzymuje.
   Wynik:
+
+## Stan w ikonce
+
+Ikonka co 20 sekund pyta: czy dystrybucja działa (`wsl -l --running`, bez
+uruchamiania jej), co mówi `bpp-ctl status` o Dockerze i usługach, i czy
+`https://localhost:8443/` odpowiada z Windowsa.
+
+- [ ] **S1.** Po starcie: zielona kropka na ikonce, dymek „BPP — działa”,
+  w menu cztery zielone linie, „Usługi: działa 7 z 7”.
+  Wynik:
+- [ ] **S2.** W trakcie startu: żółta kropka i „BPP — uruchamianie…”, linie w
+  menu zmieniają się na bieżąco, „Uruchom ponownie” jest wyszarzone.
+  Wynik:
+- [ ] **S3.** `wsl -d BPP bpp-ctl compose stop workerserver`: w ciągu minuty
+  czerwona kropka, „Usługi: działa 6 z 7; nie działa: workerserver”, jeden
+  dymek „BPP — problem”. „Uruchom ponownie” przywraca zielony stan.
+  Wynik:
+- [ ] **S4.** `wsl -d BPP systemctl stop docker docker.socket`: „Docker: nie
+  odpowiada”, „Usługi: —”, „Strona: nie odpowiada”.
+  Wynik:
+- [ ] **S5.** „Zatrzymaj” w menu: po wyjściu ikonki dystrybucja zostaje
+  `Stopped` — sprawdzanie stanu nie uruchamia jej ponownie.
+  Wynik:
+- [ ] **S6.** Kropka i linie menu są czytelne przy skalowaniu 100% i 150%.
+  Wynik:

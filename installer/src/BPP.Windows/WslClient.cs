@@ -224,6 +224,19 @@ public sealed class WslClient
         return r.StdOut;
     }
 
+    /// <summary>
+    /// <c>bpp-ctl status</c>: Docker and every service of the stack. Starts the distro when it is stopped, so
+    /// ask <see cref="IsDistroRunningAsync"/> first. Throws when bpp-ctl fails or prints something else (a
+    /// distro older than this status format).
+    /// </summary>
+    public async Task<StackStatus> StatusAsync(CancellationToken ct = default)
+    {
+        var text = await RunCtlTextAsync("status", ct).ConfigureAwait(false);
+        return StackStatus.TryParse(text, out var status) && status != null
+            ? status
+            : throw new InvalidOperationException("bpp-ctl status: nieoczekiwana odpowiedź.");
+    }
+
     private static List<string> CtlArgv(string args)
     {
         var argv = new List<string> { "-d", AppPaths.DistroName, "-u", "root", "--", CtlPath };

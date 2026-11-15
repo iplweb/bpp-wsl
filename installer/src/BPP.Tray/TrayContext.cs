@@ -8,7 +8,9 @@ namespace BPP.Tray;
 
 /// <summary>
 /// Tray mode: starts the stack (<c>bpp-ctl start --hosts …</c>), runs the LAN relay when the firewall rule
-/// exists, follows network changes, and stops the distro on "Zatrzymaj" or logoff.
+/// exists, follows network changes, and stops the distro on "Zatrzymaj" or logoff. While it runs it asks
+/// every few seconds how BPP is doing (WSL distro, Docker, services, website) and shows the answer as a
+/// coloured dot on the icon, in the tooltip and in the first lines of the menu.
 /// All state lives on the UI thread; background events are posted to it.
 /// </summary>
 internal sealed class TrayContext : ApplicationContext
@@ -22,6 +24,10 @@ internal sealed class TrayContext : ApplicationContext
     private static readonly TimeSpan StopTimeout = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan StartSettleTimeout = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan TerminateAllowance = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan StatusTimeout = TimeSpan.FromSeconds(30);
+    private const int StatusIntervalMs = 20_000;
+    private const string StatusUnknown = "sprawdzanie…";
+    private static readonly string[] StatusLabels = { "Dystrybucja WSL", "Docker", "Usługi", "Strona" };
 
     private readonly WslClient _wsl = new();
     private readonly DistroKeepAlive _keepAlive = new();
@@ -29,11 +35,16 @@ internal sealed class TrayContext : ApplicationContext
     private readonly SynchronizationContext _ui;
     private readonly int _uiThreadId = Environment.CurrentManagedThreadId;
     private readonly Icon _icon;
+    private readonly StatusIcons _statusIcons;
+    private readonly SiteProbe _site = new(Program.Url);
     private readonly ContextMenuStrip _menu;
+    private readonly ToolStripMenuItem[] _statusItems;
+    private readonly ToolStripMenuItem _restart;
     private readonly ToolStripMenuItem _share;
     private readonly ToolStripMenuItem _trust;
     private readonly NotifyIcon _tray;
     private readonly System.Windows.Forms.Timer _networkDebounce = new() { Interval = 2000 };
+    private readonly System.Windows.Forms.Timer _statusTimer = new() { Interval = StatusIntervalMs };
     private readonly SemaphoreSlim _startGate = new(1, 1); // never two `bpp-ctl start` at once
     private readonly CancellationTokenSource _lifetime = new();
 
@@ -47,6 +58,11 @@ internal sealed class TrayContext : ApplicationContext
 
     private RelaySet? _relay;
     private bool _running;
+    private bool _starting; // a `bpp-ctl start` is in flight: it owns the icon and the tooltip
+    private bool _polling;
+    private int _badPolls; // consecutive status checks that found a problem
+    private bool _announceProblem; // BPP was fine since the last balloon, so the next problem is news
+    private string? _statusError;
     private IReadOnlyList<string>? _startedHosts;
     private LogsForm? _logsForm;
 
@@ -64,8 +80,18 @@ internal sealed class TrayContext : ApplicationContext
         using (var s = typeof(TrayContext).Assembly.GetManifestResourceStream("BPP.Tray.bpp.ico")
                        ?? throw new InvalidOperationException("Brak zasobu bpp.ico."))
             _icon = new Icon(s, SystemInformation.SmallIconSize);
+        _statusIcons = new StatusIcons(_icon);
 
         _menu = new ContextMenuStrip();
+        // a click on a status line opens the logs: that is where one looks next when a line is not green
+        _statusItems = StatusLabels
+            .Select(label => new ToolStripMenuItem($"{label}: {StatusUnknown}",
+                _statusIcons.Dot(StatusLevel.Starting), (_, _) => ShowLogs()))
+            .ToArray();
+        _restart = new ToolStripMenuItem("Uruchom ponownie", null, (_, _) => Fire(() => StartAsync(force: true)))
+        {
+            Enabled = false,
+        };
         var open = new ToolStripMenuItem("Otwórz BPP", null, (_, _) => Program.OpenBrowser());
         open.Font = new Font(open.Font, FontStyle.Bold);
         _share = new ToolStripMenuItem("Udostępnij w sieci lokalnej…", null, (_, _) => Fire(ShareOnLanAsync))
@@ -77,8 +103,10 @@ internal sealed class TrayContext : ApplicationContext
         {
             Visible = false,
         };
+        _menu.Items.AddRange(_statusItems.Cast<ToolStripItem>().ToArray());
         _menu.Items.AddRange(new ToolStripItem[]
         {
+            new ToolStripSeparator(),
             open,
             new ToolStripMenuItem("Pokaż logi", null, (_, _) => ShowLogs()),
             new ToolStripMenuItem("Terminal", null, (_, _) => OpenTerminal()),
@@ -86,13 +114,14 @@ internal sealed class TrayContext : ApplicationContext
             _share,
             _trust,
             new ToolStripSeparator(),
+            _restart,
             new ToolStripMenuItem("Zatrzymaj", null, (_, _) => Fire(StopAndExitAsync)),
             new ToolStripMenuItem("Odinstaluj", null, (_, _) => Fire(UninstallAsync)),
         });
 
         _tray = new NotifyIcon
         {
-            Icon = _icon,
+            Icon = _statusIcons.Icon(StatusLevel.Starting),
             Text = TipStarting,
             ContextMenuStrip = _menu,
             Visible = true,
@@ -102,6 +131,8 @@ internal sealed class TrayContext : ApplicationContext
         _wsl.LogLine += Log;
         _keepAlive.Log += Log;
         _networkDebounce.Tick += OnNetworkSettled;
+        _statusTimer.Tick += (_, _) => Fire(PollStatusAsync);
+        _statusTimer.Start();
         NetworkChange.NetworkAddressChanged += OnNetworkAddressChanged;
         SystemEvents.SessionEnding += OnSessionEnding;
 
@@ -141,7 +172,10 @@ internal sealed class TrayContext : ApplicationContext
             }
 
             var wasRunning = _running;
-            SetState(TipStarting, running: false);
+            _starting = true;
+            _restart.Enabled = false;
+            _announceProblem = false;
+            SetState(TipStarting, StatusLevel.Starting, running: false);
             _startedHosts = null;
             await UpdateRelayAsync(hosts);
 
@@ -161,8 +195,10 @@ internal sealed class TrayContext : ApplicationContext
             if (ready && error == null)
             {
                 _startedHosts = hosts;
-                SetState(TipRunning, running: true);
+                _starting = false;
+                SetState(TipRunning, StatusLevel.Ok, running: true);
                 if (!wasRunning) _tray.ShowBalloonTip(5000, "BPP", ReadyBalloon, ToolTipIcon.Info);
+                Fire(PollStatusAsync); // fill in the status lines now, not at the next tick
                 await RefreshTrustItemAsync();
                 return;
             }
@@ -179,6 +215,8 @@ internal sealed class TrayContext : ApplicationContext
         }
         finally
         {
+            _starting = false;
+            if (!_closing) _restart.Enabled = true;
             _startGate.Release();
         }
     }
@@ -186,7 +224,7 @@ internal sealed class TrayContext : ApplicationContext
     private void ReportStartFailure(string error)
     {
         Log("Uruchamianie nie powiodło się: " + error);
-        SetState(TipError, running: false);
+        SetState(TipError, StatusLevel.Bad, running: false);
         _tray.ShowBalloonTip(10000, "BPP — błąd",
             "Nie udało się uruchomić BPP. Szczegóły: menu ikonki → „Pokaż logi” (tam też „Wyślij diagnostykę do IPLweb…”).", ToolTipIcon.Error);
     }
@@ -203,6 +241,90 @@ internal sealed class TrayContext : ApplicationContext
     {
         _networkDebounce.Stop();
         if (!_closing) Fire(() => StartAsync(force: false));
+    }
+
+    // ---- status ---------------------------------------------------------------------------------------
+
+    /// <summary>
+    /// One round of questions: is the distro running (asked without starting it), what does
+    /// <c>bpp-ctl status</c> say about Docker and the services, does the website answer. `bpp-ctl` is asked
+    /// only when the distro runs — `wsl -d BPP` would start a stopped one — and never while closing.
+    /// </summary>
+    private async Task PollStatusAsync()
+    {
+        if (_closing || _polling) return;
+        _polling = true;
+        try
+        {
+            var token = _lifetime.Token;
+            var siteTask = _site.StatusCodeAsync(token);
+            var distroRunning = await _wsl.IsDistroRunningAsync();
+            StackStatus? stack = null;
+            if (distroRunning && !_closing) stack = await AskStackAsync(token);
+            var site = await siteTask;
+            if (_closing) return;
+            ShowStatus(StatusReport.Build(distroRunning, stack, site));
+        }
+        catch (OperationCanceledException) when (_closing)
+        {
+            // closing: the clients were cancelled on purpose
+        }
+        finally
+        {
+            _polling = false;
+        }
+    }
+
+    /// <summary>Null when bpp-ctl gave no usable answer; why goes to the log, once per kind of failure.</summary>
+    private async Task<StackStatus?> AskStackAsync(CancellationToken lifetime)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(lifetime);
+        timeout.CancelAfter(StatusTimeout);
+        string error;
+        try
+        {
+            var stack = await _wsl.StatusAsync(timeout.Token);
+            _statusError = null;
+            return stack;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or System.ComponentModel.Win32Exception)
+        {
+            error = ex.Message;
+        }
+        catch (OperationCanceledException) when (!lifetime.IsCancellationRequested)
+        {
+            error = $"bpp-ctl status nie odpowiedział w ciągu {StatusTimeout.TotalSeconds:0} s.";
+        }
+        if (error != _statusError) Log("Sprawdzanie stanu: " + error);
+        _statusError = error;
+        return null;
+    }
+
+    private void ShowStatus(StatusReport report)
+    {
+        for (var i = 0; i < _statusItems.Length && i < report.Lines.Count; i++)
+        {
+            _statusItems[i].Text = report.Lines[i].Text;
+            _statusItems[i].Image = _statusIcons.Dot(report.Lines[i].Level);
+        }
+        if (_starting) return; // the icon and the tooltip say "uruchamianie" until the start ends
+
+        _tray.Icon = _statusIcons.Icon(report.Level);
+        _tray.Text = report.Tooltip;
+
+        if (report.Level != StatusLevel.Bad)
+        {
+            _badPolls = 0;
+            if (report.Level == StatusLevel.Ok) _announceProblem = true;
+            return;
+        }
+        // twice in a row: one slow answer under load is not worth a balloon
+        if (++_badPolls < 2 || !_announceProblem) return;
+        _announceProblem = false;
+        var cause = report.Lines.First(l => l.Level == StatusLevel.Bad).Text;
+        Log("BPP przestało działać poprawnie — " + string.Join("; ", report.Lines.Select(l => l.Text)));
+        _tray.ShowBalloonTip(10000, "BPP — problem",
+            $"{cause}. Menu ikonki → „Uruchom ponownie”; szczegóły w „Pokaż logi”.", ToolTipIcon.Warning);
     }
 
     // ---- LAN relay ------------------------------------------------------------------------------------
@@ -459,6 +581,7 @@ internal sealed class TrayContext : ApplicationContext
     {
         BeginClosing();
         _networkDebounce.Stop();
+        _statusTimer.Stop();
         _logsForm?.Close();
         _menu.Enabled = false;
     }
@@ -497,10 +620,11 @@ internal sealed class TrayContext : ApplicationContext
         ExitThread();
     }
 
-    private void SetState(string tooltip, bool running)
+    private void SetState(string tooltip, StatusLevel level, bool running)
     {
         _running = running;
         _tray.Text = tooltip;
+        _tray.Icon = _statusIcons.Icon(level);
     }
 
     /// <summary>Fire-and-forget on the UI thread; an unexpected failure is logged, never crashes the tray.</summary>
@@ -529,8 +653,11 @@ internal sealed class TrayContext : ApplicationContext
             _keepAlive.Log -= Log;
             _wsl.LogLine -= Log;
             _networkDebounce.Dispose();
+            _statusTimer.Dispose();
+            _site.Dispose();
             _tray.Dispose();
             _menu.Dispose();
+            _statusIcons.Dispose();
             _icon.Dispose();
             _lifetime.Dispose();
         }
