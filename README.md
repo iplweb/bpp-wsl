@@ -129,8 +129,8 @@ Z innych komputerów w sieci BPP jest dostępne pod `https://<adres-IP-tego-komp
 
 BPP domyślnie **startuje samo** po zalogowaniu do Windows (pole **Uruchamiaj
 BPP po zalogowaniu do Windows** w instalatorze jest zaznaczone). Działa wtedy w
-tle i zajmuje kilka GB pamięci RAM, nawet do 8 GB: jeśli komputer zwalnia,
-wyłącz to w menu ikonki albo zatrzymaj BPP. Bez autostartu uruchamiasz BPP
+tle, zajmuje kilka GB pamięci RAM i może okresowo spowalniać komputer:
+autostart wyłączysz w menu ikonki, a samo BPP zatrzymasz pozycją **Zatrzymaj**. Bez autostartu uruchamiasz BPP
 skrótem **BPP** w Menu Start. Po uruchomieniu w zasobniku (obok zegara) pojawia się ikonka z menu:
 
 | Pozycja | Co robi |

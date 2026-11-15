@@ -69,9 +69,9 @@ internal sealed class WelcomePage : Page
             Margin = new Padding(0, 4, 0, 4),
         };
         AddRow(autostart);
-        AddRow(Body("BPP działa wtedy w tle i zajmuje kilka GB pamięci RAM (nawet do 8 GB). Jeśli komputer zacznie " +
-                    "działać wolno, wyłącz to ustawienie w menu ikonki BPP obok zegara albo zatrzymaj BPP " +
-                    "pozycją „Zatrzymaj”."));
+        AddRow(Body("BPP działa wtedy w tle, zajmuje kilka GB pamięci RAM i może okresowo spowalniać komputer. " +
+                    "Ustawienie można wyłączyć w menu ikonki BPP obok zegara, a samo BPP zatrzymać pozycją " +
+                    "„Zatrzymaj”."));
 
         var installButton = Action("Zainstaluj",
             () => install(demo.Checked ? BPP.Core.DemoThemes.All[theme.SelectedIndex].Key : null, autostart.Checked));
