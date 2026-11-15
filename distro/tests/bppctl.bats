@@ -347,9 +347,9 @@ _pull_fracs() {
   run "$CTL" status
   [ "$status" -eq 0 ]
   [ "${#lines[@]}" = 1 ]
-  [ "$(echo "$output" | jq -c .)" = '{"running":true,"health":"healthy","docker":true,"services":[{"name":"appserver","state":"running","health":"healthy"}]}' ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":true,"health":"healthy","docker":true,"image_tag":"t1","services":[{"name":"appserver","state":"running","health":"healthy"}]}' ]
   MOCK_HEALTH=absent run "$CTL" status
-  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":true,"services":[{"name":"appserver","state":"absent","health":""}]}' ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":true,"image_tag":"t1","services":[{"name":"appserver","state":"absent","health":""}]}' ]
   MOCK_HEALTH=starting run "$CTL" status
   [ "$(echo "$output" | jq -c '[.running, .health]')" = '[true,"starting"]' ]
 }
@@ -377,7 +377,7 @@ _pull_fracs() {
   : >"$MOCK_DOCKER_LOG"
   MOCK_DOCKER_INFO_FAILS=99 run "$CTL" status
   [ "$status" -eq 0 ]
-  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":false,"services":[]}' ]
+  [ "$(echo "$output" | jq -c .)" = '{"running":false,"health":"absent","docker":false,"image_tag":"t1","services":[]}' ]
   ! grep -q 'docker compose' "$MOCK_DOCKER_LOG"
 }
 

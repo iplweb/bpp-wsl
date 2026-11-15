@@ -4,13 +4,13 @@ namespace BPP.Setup.Pages;
 internal sealed record ErrorAction(string Text, Action Run);
 
 /// <summary>
-/// Title, problem list, "Pokaż logi" / "Zapisz log do pliku…" / "Wyślij diagnostykę do IPLweb…" links, optional "Spróbuj ponownie" or other
-/// action, "Zamknij".
+/// Title, problem list, "Pokaż logi" / "Zapisz log do pliku…" / "Wyślij diagnostykę do IPLweb…" links (left
+/// out when nothing has run yet), optional "Spróbuj ponownie" or other action, "Zamknij".
 /// </summary>
 internal sealed class ErrorPage : Page
 {
     public ErrorPage(string title, IReadOnlyList<string> problems, Action showLogs, Action saveLog, Action sendDiagnostics,
-        Action? retry, Action close, ErrorAction? extra = null)
+        Action? retry, Action close, ErrorAction? extra = null, bool showLogLinks = true)
     {
         AddRow(Title(title));
         // the problem list takes the free height and scrolls, so long messages never push the buttons off;
@@ -27,11 +27,14 @@ internal sealed class ErrorPage : Page
             TabStop = false,
         }, fill: true);
 
-        var links = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 4) };
-        links.Controls.Add(Link("Pokaż logi", showLogs));
-        links.Controls.Add(Link("Zapisz log do pliku…", saveLog));
-        links.Controls.Add(Link("Wyślij diagnostykę do IPLweb…", sendDiagnostics));
-        AddRow(links);
+        if (showLogLinks)
+        {
+            var links = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 6, 0, 4) };
+            links.Controls.Add(Link("Pokaż logi", showLogs));
+            links.Controls.Add(Link("Zapisz log do pliku…", saveLog));
+            links.Controls.Add(Link("Wyślij diagnostykę do IPLweb…", sendDiagnostics));
+            AddRow(links);
+        }
 
         var buttons = new List<Button> { Action("Zamknij", close) };
         if (retry != null) buttons.Add(Action("Spróbuj ponownie", retry));

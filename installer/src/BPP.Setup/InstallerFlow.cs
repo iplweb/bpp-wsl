@@ -355,13 +355,17 @@ internal sealed class InstallerFlow
                 _ui.ShowRestart();
                 break;
             case Step.PreflightFailed:
+                // nothing was installed or run yet, so there are no logs worth showing or sending
                 var anyway = InstallerPlan.CanInstallAnyway(_state);
-                _ui.ShowError("Ten komputer nie spełnia wymagań BPP", anyway
-                        ? _preflightProblems.Append(
-                            "Możesz zainstalować BPP mimo to (przycisk „Zainstaluj mimo to”), ale instalacja może się " +
-                            "nie udać, a BPP może działać wolno lub zatrzymać się z braku pamięci albo miejsca.").ToList()
-                        : _preflightProblems,
-                    canRetry: false, canStopBpp: InstallerPlan.CanStopBpp(_state), canInstallAnyway: anyway);
+                if (anyway)
+                    _ui.ShowError("Ten komputer ma mniej zasobów, niż zaleca BPP", _preflightProblems.Append(
+                            "To tylko ostrzeżenie: możesz zainstalować BPP (przycisk „Zainstaluj mimo to”). BPP może " +
+                            "wtedy działać wolno, a przy bardzo małej ilości pamięci albo miejsca instalacja może się " +
+                            "nie udać.").ToList(),
+                        canRetry: false, canInstallAnyway: true, showLogLinks: false);
+                else
+                    _ui.ShowError("Ten komputer nie spełnia wymagań BPP", _preflightProblems,
+                        canRetry: false, canStopBpp: InstallerPlan.CanStopBpp(_state), showLogLinks: false);
                 break;
             case Step.DownloadFailed:
                 _ui.ShowError("Nie udało się pobrać dystrybucji BPP", new[]
@@ -465,10 +469,10 @@ internal sealed class InstallerFlow
             PreflightProblem.NotX64 =>
                 $"BPP wymaga 64-bitowego procesora x64 (ten komputer: {RuntimeInformation.OSArchitecture}).",
             PreflightProblem.TooLittleRam =>
-                $"Za mało pamięci RAM: {Gb(input.TotalRamBytes)} GB, wymagane co najmniej {Gb(Preflight.MinRam)} GB.",
+                $"Mało pamięci RAM: {Gb(input.TotalRamBytes)} GB, zalecane co najmniej {Gb(Preflight.MinRam)} GB.",
             PreflightProblem.TooLittleDisk =>
-                $"Za mało wolnego miejsca na dysku {check.DriveName}: {Gb((ulong)input.FreeDiskBytes)} GB, " +
-                $"wymagane co najmniej {Gb((ulong)Preflight.MinDisk)} GB.",
+                $"Mało wolnego miejsca na dysku {check.DriveName}: {Gb((ulong)input.FreeDiskBytes)} GB, " +
+                $"zalecane co najmniej {Gb((ulong)Preflight.MinDisk)} GB.",
             PreflightProblem.PortBusy => PortBusyMessage(check.PortOwner, heldByBpp, stopAttempted),
             _ => p.ToString(),
         }).ToList();
@@ -533,6 +537,12 @@ internal sealed class InstallerFlow
 
     /// <summary>Pinned at build time (build/build.sh); empty in development builds.</summary>
     private static string RootfsUrl => Metadata("RootfsUrl");
+
+    /// <summary>
+    /// The version of BPP itself that this installer installs: the tag of the BPP Docker images pinned in its
+    /// rootfs (e.g. 202611.1407). Empty in development builds.
+    /// </summary>
+    internal static string ImageTag => Metadata("ImageTag");
 
     private static string? RootfsSha256 => Metadata("RootfsSha256") is { Length: > 0 } h ? h : null;
 

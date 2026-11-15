@@ -18,6 +18,11 @@
       <_Parameter1>RootfsSha256</_Parameter1>
       <_Parameter2>$(RootfsSha256)</_Parameter2>
     </AssemblyAttribute>
+    <!-- The tag of the BPP images in that rootfs (-p:ImageTag=…), shown to the user as "the BPP version". -->
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>ImageTag</_Parameter1>
+      <_Parameter2>$(ImageTag)</_Parameter2>
+    </AssemblyAttribute>
   </ItemGroup>
 
   <ItemGroup>

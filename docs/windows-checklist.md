@@ -277,7 +277,7 @@ Windows: ______ (11 / 10 22H2), konto: ______ (admin / zwykłe).
   `%LOCALAPPDATA%\Programs\BPP\BPP.exe --setup --resume` i instalacja kończy
   się sukcesem, choć pobrana kopia `BPP-<wersja>.exe` została usunięta.
   Wynik:
-- [ ] **M7.** Komputer z mniej niż 8 GB RAM (albo dysk z mniej niż 25 GB
+- [ ] **M7.** Komputer z mniej niż 8 GB RAM (albo dysk z mniej niż 8 GB
   wolnego): strona wymagań z przyciskiem **„Zainstaluj mimo to”** →
   ostrzeżenie Tak/Nie → instalacja idzie dalej. Przy zajętym porcie 8443 lub
   procesorze ARM tego przycisku **nie ma**. Po „mimo to” i restarcie (WSL)
@@ -403,4 +403,25 @@ uruchamiania jej), co mówi `bpp-ctl status` o Dockerze i usługach, i czy
   ponownie”): krok pobierania dystrybucji kończy się od razu (plik
   `%LOCALAPPDATA%\BPP\download\bpp-rootfs-….tar.gz` został po pierwszej), w logu
   nie ma pobierania 170 MB.
+  Wynik:
+
+## Pierwsza strona instalatora i strona wymagań
+
+- [ ] **P1.** Okno instalatora otwiera się na środku ekranu (także w pionie),
+  przy 100% i 150%.
+  Wynik:
+- [ ] **P2.** Licencja jest na białym tle, tekst da się zaznaczyć i skopiować;
+  rok w nocie to 2017-2026.
+  Wynik:
+- [ ] **P3.** „Zapisz licencję…” zapisuje plik tekstowy; „Wydrukuj licencję…”
+  otwiera okno drukowania Windows, wydruk (np. do PDF) ma cały tekst, zawinięty
+  w marginesach.
+  Wynik:
+- [ ] **P4.** Bez zaznaczonej akceptacji: najechanie myszą na wyszarzone
+  „Zainstaluj” albo kliknięcie go — pole akceptacji miga trzy razy na żółto.
+  Po zaznaczeniu nie miga.
+  Wynik:
+- [ ] **P5.** Mało RAM albo miejsca: tytuł „Ten komputer ma mniej zasobów, niż
+  zaleca BPP”, bez linków do logów i diagnostyki. Dysk z 16 GB wolnego nie
+  wywołuje ostrzeżenia.
   Wynik:

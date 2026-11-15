@@ -91,7 +91,7 @@ public class PreflightTests
 {
     [Fact] public void Preflight_refuses_7gb() => Assert.Contains(PreflightProblem.TooLittleRam, Preflight.Check(new(7UL << 30, 100L << 30, Architecture.X64, true)));
 
-    [Fact] public void Preflight_ok_at_limits() => Assert.Empty(Preflight.Check(new(8UL << 30, 25L << 30, Architecture.X64, true)));
+    [Fact] public void Preflight_ok_at_limits() => Assert.Empty(Preflight.Check(new(8UL << 30, 8L << 30, Architecture.X64, true)));
 
     [Fact]
     public void Preflight_arm_and_port()
@@ -135,7 +135,19 @@ public class PreflightTests
         Assert.False(Preflight.PortHeldByBpp(Array.Empty<PreflightProblem>(), "wslrelay", bppDistroExists: true));
     }
 
-    [Fact] public void Preflight_refuses_little_disk() => Assert.Contains(PreflightProblem.TooLittleDisk, Preflight.Check(new(16UL << 30, (25L << 30) - 1, Architecture.X64, true)));
+    [Fact] public void Preflight_refuses_little_disk() => Assert.Contains(PreflightProblem.TooLittleDisk, Preflight.Check(new(16UL << 30, (8L << 30) - 1, Architecture.X64, true)));
+
+    [Fact]
+    public void Sixteen_gb_of_free_disk_is_enough()
+        => Assert.Empty(Preflight.Check(new(16UL << 30, 16L << 30, Architecture.X64, true)));
+
+    [Fact]
+    public void Four_gb_of_ram_only_warns()
+    {
+        var p = Preflight.Check(new(4UL << 30, 100L << 30, Architecture.X64, true));
+        Assert.Equal(new[] { PreflightProblem.TooLittleRam }, p);
+        Assert.True(Preflight.OnlySoft(p));
+    }
 }
 
 public class WslTextCleanLineTests

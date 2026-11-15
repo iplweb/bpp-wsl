@@ -76,6 +76,27 @@ internal abstract class Page : UserControl
         return b;
     }
 
+    /// <summary>
+    /// Runs <paramref name="action"/> when the mouse comes over <paramref name="button"/> or clicks it while it is
+    /// disabled. A disabled button gets no mouse events itself: Windows hands them to its parent, the button row.
+    /// </summary>
+    protected void WhenDisabledButtonTouched(Button button, Action action)
+    {
+        var over = false;
+        bool Hit(Point p) => !button.Enabled && button.Visible && button.Bounds.Contains(p);
+        _buttons.MouseMove += (_, e) =>
+        {
+            var now = Hit(e.Location);
+            if (now && !over) action();
+            over = now;
+        };
+        _buttons.MouseLeave += (_, _) => over = false;
+        _buttons.MouseDown += (_, e) =>
+        {
+            if (Hit(e.Location)) action();
+        };
+    }
+
     /// <summary>How much taller than the base window this page wants to be (96-DPI units); the form clamps it to the screen.</summary>
     public virtual int ExtraHeight => 0;
 

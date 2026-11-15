@@ -30,7 +30,8 @@ public sealed record ServiceStatus(string Name, string State, string Health)
 }
 
 /// <summary>What <c>bpp-ctl status</c> prints: whether Docker answers, and every service of the stack.</summary>
-public sealed record StackStatus(bool Docker, IReadOnlyList<ServiceStatus> Services)
+/// <param name="ImageTag">The version of BPP in use (tag of its Docker images); empty when unknown.</param>
+public sealed record StackStatus(bool Docker, IReadOnlyList<ServiceStatus> Services, string ImageTag = "")
 {
     /// <summary>Parses the output of <c>bpp-ctl status</c>: the first line that is such a JSON object.</summary>
     public static bool TryParse(string text, out StackStatus? status)
@@ -64,7 +65,7 @@ public sealed record StackStatus(bool Docker, IReadOnlyList<ServiceStatus> Servi
                 if (name.Length == 0) return false;
                 services.Add(new ServiceStatus(name, Text(s, "state"), Text(s, "health")));
             }
-            status = new StackStatus(docker.GetBoolean(), services);
+            status = new StackStatus(docker.GetBoolean(), services, Text(root, "image_tag"));
             return true;
         }
         catch (JsonException)

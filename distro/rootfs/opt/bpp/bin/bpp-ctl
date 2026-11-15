@@ -264,13 +264,16 @@ cmd_stop() {
 }
 
 # status - one JSON line for the tray icon, which asks every few seconds:
-#   {"running":bool,"health":"...","docker":bool,"services":[{"name":"...","state":"...","health":"..."},...]}
+#   {"running":bool,"health":"...","docker":bool,"image_tag":"...",
+#    "services":[{"name":"...","state":"...","health":"..."},...]}
+# "image_tag" is the version of BPP in use: BPP_IMAGE_TAG of state/.env (empty before init).
 # "docker" says whether the daemon answers; "services" lists every service of the stack in compose order,
 # with the container's state and health as Docker reports them (a service without a container has state
 # "absent", one without a healthcheck has an empty health). "running" and "health" describe appserver.
 # Never waits for Docker and never fails.
 cmd_status() {
-  local docker=false names="" ps="" rows=""
+  local docker=false names="" ps="" rows="" tag=""
+  tag="$(sed -n 's/^BPP_IMAGE_TAG=//p' "$BPP_HOME/state/.env" 2>/dev/null | head -n 1 || true)"
   if timeout 10 docker info >/dev/null 2>&1; then
     docker=true
     names="$(bpp_compose config --services 2>/dev/null || true)"
@@ -279,7 +282,7 @@ cmd_status() {
   # compose prints one object per line or, in older versions, one array
   rows="$(jq -cs 'flatten' <<<"$ps" 2>/dev/null || true)"
   [ -n "$rows" ] || rows='[]'
-  jq -cn --argjson docker "$docker" --arg names "$names" --argjson rows "$rows" '
+  jq -cn --argjson docker "$docker" --arg names "$names" --argjson rows "$rows" --arg tag "$tag" '
     ($names | split("\n") | map(select(length > 0))) as $expected
     | ($rows | map({name: .Service, state: (.State // ""), health: (.Health // "")})) as $have
     | ($expected + (($have | map(.name)) - $expected)) as $all
@@ -294,6 +297,7 @@ cmd_status() {
           elif ($app.state | IN("running", "restarting")) then "starting"
           else "absent" end),
         docker: $docker,
+        image_tag: $tag,
         services: $services
       }'
 }

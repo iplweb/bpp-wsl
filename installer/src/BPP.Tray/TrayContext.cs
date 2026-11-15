@@ -41,6 +41,9 @@ internal sealed class TrayContext : ApplicationContext
     private readonly ToolStripMenuItem[] _statusItems;
     private readonly ToolStripMenuItem _restart;
     private readonly ToolStripMenuItem _autostart;
+    private readonly ToolStripMenuItem _version;
+    private static readonly string ProgramVersion
+        = typeof(TrayContext).Assembly.GetName().Version?.ToString(3) ?? "?";
     private readonly Registration _registration = new();
     private readonly ToolStripMenuItem _share;
     private readonly ToolStripMenuItem _trust;
@@ -107,6 +110,9 @@ internal sealed class TrayContext : ApplicationContext
         };
         _autostart = new ToolStripMenuItem("Uruchamiaj po zalogowaniu do Windows", null, (_, _) => ToggleAutostart());
         _menu.Opening += (_, _) => RefreshAutostartItem(); // the entry may have been changed outside
+        // which BPP is running (its images' tag, known after the first status check) and which program this is
+        _version = new ToolStripMenuItem(VersionText("")) { Enabled = false };
+        _menu.Items.Add(_version);
         _menu.Items.AddRange(_statusItems.Cast<ToolStripItem>().ToArray());
         _menu.Items.AddRange(new ToolStripItem[]
         {
@@ -268,6 +274,7 @@ internal sealed class TrayContext : ApplicationContext
             if (distroRunning && !_closing) stack = await AskStackAsync(token);
             var site = await siteTask;
             if (_closing) return;
+            if (stack is { ImageTag.Length: > 0 }) _version.Text = VersionText(stack.ImageTag);
             ShowStatus(StatusReport.Build(distroRunning, stack, site));
         }
         catch (OperationCanceledException) when (_closing)
@@ -304,6 +311,9 @@ internal sealed class TrayContext : ApplicationContext
         _statusError = error;
         return null;
     }
+
+    private static string VersionText(string imageTag)
+        => imageTag.Length > 0 ? $"BPP {imageTag} (program {ProgramVersion})" : $"BPP (program {ProgramVersion})";
 
     private void ShowStatus(StatusReport report)
     {

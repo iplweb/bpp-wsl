@@ -76,7 +76,7 @@ rm -rf "$dist/app"
 dotnet publish "$repo/installer/src/BPP.Tray" -c Release -r win-x64 --self-contained \
   -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true \
   -p:EnableWindowsTargeting=true -p:Version="$numeric_version" \
-  -p:RootfsUrl="$base_url/$rootfs_name" -p:RootfsSha256="$rootfs_sha" \
+  -p:RootfsUrl="$base_url/$rootfs_name" -p:RootfsSha256="$rootfs_sha" -p:ImageTag="$tag" \
   -o "$dist/app"
 cp "$dist/app/BPP.exe" "$dist/$app_name"
 sign_file "$dist/$app_name"

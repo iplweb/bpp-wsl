@@ -8,8 +8,14 @@ public enum PreflightProblem { NotX64, TooLittleRam, TooLittleDisk, PortBusy }
 
 public static class Preflight
 {
+    /// <summary>Recommended, not required: with less the installer warns and lets the user go on.</summary>
     public const ulong MinRam = 8UL << 30;
-    public const long MinDisk = 25L << 30;
+
+    /// <summary>
+    /// Recommended free space. A fresh installation takes about 4 GB (the distro, the Docker images unpacked,
+    /// the database with demo data); the rest is room for the downloads and for the data to grow.
+    /// </summary>
+    public const long MinDisk = 8L << 30;
 
     public static IReadOnlyList<PreflightProblem> Check(PreflightInput input)
     {

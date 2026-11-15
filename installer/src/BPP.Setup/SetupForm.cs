@@ -132,7 +132,8 @@ internal sealed class SetupForm : Form
         _flow = new InstallerFlow(this, exe, _args);
         // after the restart nothing starts by itself: the user first reads what is about to happen
         if (_args.Resume) ShowPage(new ResumePage(Install, Close));
-        else ShowPage(new WelcomePage(InstallWith, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt")));
+        else ShowPage(new WelcomePage(InstallWith, LoadText(typeof(SetupForm).Assembly, "LICENSE-BPP.txt"),
+            InstallerFlow.Version, InstallerFlow.ImageTag));
     }
 
     private void Install() => RunFlow(f => f.RunAsync());
@@ -193,14 +194,15 @@ internal sealed class SetupForm : Form
 
     /// <param name="canStopBpp">Offer "Zatrzymaj BPP" (port 8443 held by a running BPP distro).</param>
     /// <param name="canInstallAnyway">Offer "Zainstaluj mimo to" (only too little RAM / disk).</param>
+    /// <param name="showLogLinks">False when nothing ran yet (the requirements check), so there is no log to offer.</param>
     public void ShowError(string title, IReadOnlyList<string> problems, bool canRetry, bool canStopBpp = false,
-        bool canInstallAnyway = false)
+        bool canInstallAnyway = false, bool showLogLinks = true)
     {
         var extra = canStopBpp ? new ErrorAction("Zatrzymaj BPP", StopBpp)
             : canInstallAnyway ? new ErrorAction("Zainstaluj mimo to", InstallAnyway)
             : null;
         ShowPage(new ErrorPage(title, problems, ShowLogs, SaveLog, () => SendDiagnostics(this), canRetry ? Retry : null, Close,
-            extra));
+            extra, showLogLinks));
     }
 
     private string LogText()
@@ -251,7 +253,7 @@ internal sealed class SetupForm : Form
     /// <summary>Replaces the current page; the progress page is kept (its log survives a retry).</summary>
     private void ShowPage(Control page)
     {
-        FitHeight(page);
+        FitHeight(page, keepCentre: true);
         var old = _content.Controls.Cast<Control>().ToList();
         _content.Controls.Clear();
         _content.Controls.Add(page);
@@ -261,17 +263,23 @@ internal sealed class SetupForm : Form
 
     /// <summary>
     /// Every page gets the base height plus what it asks for (the progress page: its terminal, once shown),
-    /// within the screen.
+    /// within the screen. With <paramref name="keepCentre"/> (a change of page) the window grows and shrinks
+    /// around its middle: it opens centred on the screen at the base height, and a taller first page would
+    /// otherwise push only its bottom edge down. Without it (the terminal switch) the top edge stays put, so
+    /// the switch does not move from under the mouse.
     /// </summary>
-    private void FitHeight(Control page)
+    private void FitHeight(Control page, bool keepCentre)
     {
         if (_baseHeight == 0) _baseHeight = Height;
         var area = Screen.FromControl(this).WorkingArea;
+        var middle = Top + Height / 2;
         Height = Math.Min(_baseHeight + LogicalToDeviceUnits((page as Pages.Page)?.ExtraHeight ?? 0), area.Height);
-        if (Bottom > area.Bottom) Top = Math.Max(area.Top, area.Bottom - Height);
+        if (keepCentre) Top = middle - Height / 2;
+        if (Bottom > area.Bottom) Top = area.Bottom - Height;
+        if (Top < area.Top) Top = area.Top;
     }
 
-    private void FitProgressHeight() => FitHeight(_progress);
+    private void FitProgressHeight() => FitHeight(_progress, keepCentre: false);
 
     /// <summary>"Anuluj" behaves like closing the window (see <see cref="OnFormClosing"/>).</summary>
     private void RequestCancel() => Close();

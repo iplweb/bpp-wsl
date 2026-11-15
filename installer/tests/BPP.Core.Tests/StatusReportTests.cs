@@ -26,10 +26,11 @@ public class StatusReportTests
     public void Parses_bpp_ctl_status()
     {
         const string json = """
-            {"running":true,"health":"healthy","docker":true,"services":[{"name":"dbserver","state":"running","health":"healthy"},{"name":"denorm-queue","state":"running","health":""},{"name":"webserver","state":"absent","health":""}]}
+            {"running":true,"health":"healthy","docker":true,"image_tag":"202611.1407","services":[{"name":"dbserver","state":"running","health":"healthy"},{"name":"denorm-queue","state":"running","health":""},{"name":"webserver","state":"absent","health":""}]}
             """;
         Assert.True(StackStatus.TryParse(json, out var s));
         Assert.True(s!.Docker);
+        Assert.Equal("202611.1407", s.ImageTag);
         Assert.Equal(new[] { Svc("dbserver"), Svc("denorm-queue", health: ""), Svc("webserver", "absent", "") }, s.Services);
     }
 
@@ -39,6 +40,7 @@ public class StatusReportTests
         Assert.True(StackStatus.TryParse("wsl: some warning\r\n{\"docker\":false,\"services\":[]}\r\n", out var s));
         Assert.False(s!.Docker);
         Assert.Empty(s.Services);
+        Assert.Equal("", s.ImageTag); // a distro that does not report it
     }
 
     [Theory]

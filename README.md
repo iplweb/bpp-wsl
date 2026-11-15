@@ -59,7 +59,7 @@ z folderu zamiast je pobierać (sumy kontrolne sprawdza tak samo).
 ## Wymagania
 
 - Windows 10 22H2 lub Windows 11, **64-bitowy (x64)** — komputery ARM nie są obsługiwane,
-- **8 GB RAM** i **25 GB wolnego miejsca** na dysku. Przy mniejszej ilości
+- zalecane **8 GB RAM** i **8 GB wolnego miejsca** na dysku. Przy mniejszej ilości
   instalator pokaże ostrzeżenie z przyciskiem **Zainstaluj mimo to**. BPP
   może wtedy działać wolno albo zatrzymać się, gdy zabraknie pamięci lub
   miejsca,
