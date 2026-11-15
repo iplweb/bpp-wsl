@@ -385,9 +385,10 @@ uruchamiania jej), co mówi `bpp-ctl status` o Dockerze i usługach, i czy
 
 ## Autostart i ponowna instalacja bez pobierania
 
-- [ ] **A1.** Instalacja z zaznaczonym „Uruchamiaj BPP po zalogowaniu do
-  Windows”: po restarcie i zalogowaniu ikonka pojawia się sama i BPP wstaje.
-  Bez zaznaczenia — nie pojawia się.
+- [ ] **A1.** Pole „Uruchamiaj BPP po zalogowaniu do Windows” jest domyślnie
+  zaznaczone, pod nim uwaga o pamięci RAM (cała strona mieści się w oknie przy
+  100% i 150%). Po instalacji, restarcie i zalogowaniu ikonka pojawia się sama
+  i BPP wstaje. Po odznaczeniu pola — nie pojawia się.
   Wynik:
 - [ ] **A2.** Menu ikonki → „Uruchamiaj po zalogowaniu do Windows”: ptaszek
   zgadza się z wpisem `BPP` w `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`,

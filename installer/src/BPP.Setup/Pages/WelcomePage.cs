@@ -3,12 +3,12 @@ namespace BPP.Setup.Pages;
 /// <summary>
 /// Test-installation notice, the BPP MIT licence and its acceptance ("Zainstaluj" needs the checkbox), and the
 /// optional demo data with its theme (on by default, with Lem's or the Witcher's world picked at random), and
-/// the choice to start BPP at every sign-in (off by default: BPP takes a few GB of memory).
+/// the choice to start BPP at every sign-in (on by default, with a note about the memory it takes).
 /// </summary>
 internal sealed class WelcomePage : Page
 {
     /// <summary>Keeps the licence text readable now that the demo data rows sit below it.</summary>
-    public override int ExtraHeight => 120;
+    public override int ExtraHeight => 160;
 
     public WelcomePage(Action<string?, bool> install, string licence)
     {
@@ -62,12 +62,16 @@ internal sealed class WelcomePage : Page
 
         var autostart = new CheckBox
         {
-            Text = "Uruchamiaj BPP po zalogowaniu do Windows (można zmienić później w menu ikonki)",
+            Text = "Uruchamiaj BPP po zalogowaniu do Windows",
+            Checked = true,
             AutoSize = true,
             MaximumSize = new Size(Width80, 0),
             Margin = new Padding(0, 4, 0, 4),
         };
         AddRow(autostart);
+        AddRow(Body("BPP działa wtedy w tle i zajmuje kilka GB pamięci RAM (nawet do 8 GB). Jeśli komputer zacznie " +
+                    "działać wolno, wyłącz to ustawienie w menu ikonki BPP obok zegara albo zatrzymaj BPP " +
+                    "pozycją „Zatrzymaj”."));
 
         var installButton = Action("Zainstaluj",
             () => install(demo.Checked ? BPP.Core.DemoThemes.All[theme.SelectedIndex].Key : null, autostart.Checked));
