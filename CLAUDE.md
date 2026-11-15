@@ -18,6 +18,10 @@ repository [iplweb/web-page-bpp](https://github.com/iplweb/web-page-bpp), file
 - the link to the release page, `https://github.com/iplweb/bpp-wsl/releases/tag/v<version>`,
   and its link text, `BPP dla Windows <version>`.
 
+The download link on the website **MUST** point directly at the file itself — the small
+`BPP-Setup-<version>.exe` — so that clicking it starts the download. It must never point
+at the release page, at `releases/latest`, or at any of the other (bigger) release files.
+
 Afterwards no mention of the previous version may be left in that file.
 
 Do it only once the release workflow has finished and the files are public; a link to a
